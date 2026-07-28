@@ -1,0 +1,46 @@
+@import "tailwindcss";
+@theme {
+  --color-canvas: #eef1e4;
+  --color-bed: #e2e8d2;
+  --color-soil: #5b4636;
+  --color-ink: #262a1f;
+  --color-ink-soft: #5c6152;
+  --color-moss-100: #dce4dc;
+  --color-moss-300: #95ae93;
+  --color-moss: #3f6b3a;
+  --color-moss-light: #6a9a5f;
+  --color-moss-700: #31532d;
+  --color-moss-900: #233b20;
+  --color-rust-100: #f2e0dc;
+  --color-rust-300: #d6a293;
+  --color-rust: #b5553a;
+  --color-rust-700: #8d422d;
+  --color-rust-900: #642f20;
+  --color-marigold-100: #fbeedc;
+  --color-marigold-300: #f2cc94;
+  --color-marigold: #e8a33d;
+  --color-marigold-700: #b57f30;
+  --color-marigold-900: #805a22;
+  --color-sky-100: #e1e9ef;
+  --color-sky-300: #a5bbce;
+  --color-sky: #5b84a6;
+  --color-sky-soft: #cbdae4;
+  --color-sky-700: #476781;
+  --color-sky-900: #32495b;
+  --color-clay-100: #eae2e4;
+  --color-clay-300: #bfa6ae;
+  --color-clay: #8b5e6b;
+  --color-clay-700: #6c4953;
+  --color-clay-900: #4c343b;
+  --color-storm: #4a5568;
+  --color-card: #f7f8f0;
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+}

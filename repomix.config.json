@@ -1,0 +1,20 @@
+{
+  "ignore": {
+    "customPatterns": [
+      "node_modules",
+      ".next",
+      ".env.local",
+      "public",
+      "repomix-output.*",
+      "package-lock.json",
+      "MDFILES"
+    ]
+  },
+
+  "output": {
+    "removeComments": true,
+    "removeEmptyLines": true,
+    "directoryStructure": false,
+    "fileSummary": false
+  }
+}
