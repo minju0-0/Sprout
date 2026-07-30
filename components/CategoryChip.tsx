@@ -8,7 +8,7 @@ export function CategoryChip({ name, species }: CategoryChipProps) {
   const accent = plantTypeMap[species]?.stages.thriving.accent ?? "#3f6b3a";
   return (
     <span
-      className="inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap"
+      className="chip max-w-full whitespace-nowrap"
       style={{ backgroundColor: `${accent}26`, color: accent }}
     >
       <span

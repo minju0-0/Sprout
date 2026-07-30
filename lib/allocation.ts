@@ -1,6 +1,6 @@
+// lib/allocation.ts
 import type { AllocationEvent, BudgetCategory, MoneyPocket } from "@/types";
 import { getAvailableToMove } from "@/lib/gardenLogic";
-
 export interface MoveMoneyInput {
   categories: BudgetCategory[];
   unallocated: number;
@@ -8,28 +8,12 @@ export interface MoveMoneyInput {
   to: MoneyPocket;
   amount: number;
 }
-
 export interface MoveMoneyResult {
   categories: BudgetCategory[];
   unallocated: number;
   event: AllocationEvent;
 }
-
 export class AllocationError extends Error {}
-
-/**
- * Moves a positive amount of money from one pocket (a category envelope, or
- * the unallocated pool) to another. Pure function — no crypto.randomUUID or
- * Date.now() calls except via the injected idFactory/date, so it's testable
- * without mocking globals.
- *
- * Rules that keep the garden's numbers honest:
- * - `from` and `to` must be different pockets.
- * - amount must be a positive, finite number.
- * - a category can only give up its *available* balance (budgetLimit - spent),
- *   never money that's already been spent — see getAvailableToMove.
- * - the unallocated pool can't go negative.
- */
 export function moveMoney(
   input: MoveMoneyInput,
   idFactory: () => string = () => crypto.randomUUID(),
@@ -42,15 +26,20 @@ export function moveMoney(
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new AllocationError("Amount must be a number greater than 0.");
   }
-  const available = from === "unallocated" ? unallocated : getAvailableToMove(
-    categories.find((category) => category.id === from) as BudgetCategory,
-  );
+  // Validate that both pockets actually exist BEFORE looking anything up
+  // by id — getAvailableToMove() below dereferences the found category
+  // directly, so doing this after would let an unknown `from` throw a raw
+  // TypeError instead of a clean AllocationError.
   if (from !== "unallocated" && !categories.some((category) => category.id === from)) {
     throw new AllocationError("Source category not found.");
   }
   if (to !== "unallocated" && !categories.some((category) => category.id === to)) {
     throw new AllocationError("Destination category not found.");
   }
+  const available =
+    from === "unallocated"
+      ? unallocated
+      : getAvailableToMove(categories.find((category) => category.id === from) as BudgetCategory);
   if (amount > available) {
     throw new AllocationError("That's more than is available to move.");
   }
@@ -75,7 +64,6 @@ export function moveMoney(
   };
   return { categories: nextCategories, unallocated: nextUnallocated, event };
 }
-
 export function addIncomeEvent(
   amount: number,
   idFactory: () => string = () => crypto.randomUUID(),

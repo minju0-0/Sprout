@@ -16,6 +16,28 @@ function markSaved(setSyncStatus: (status: "saved", error?: null) => void) {
     useBudgetStore.getState().setSyncStatus("idle");
   }, SAVED_DISPLAY_MS);
 }
+// FIX (bug 2): Settings' "Delete account data" flow deletes the Supabase row
+// and then calls loadGardenState() with an empty garden so the local copy
+// doesn't re-upload stale data. But loadGardenState() is itself a store
+// change, and the autosave subscription below only checks
+// `hasLoadedThisSession` — it doesn't know an intentional server-side delete
+// just happened — so it would debounce-save that (now-empty) state right
+// back to Supabase a moment later, silently recreating the row.
+//
+// Calling this right after the DELETE request (before loadGardenState)
+// clears `hasLoadedThisSession` and cancels any in-flight debounced save, so
+// the autosave subscription's guard (`if (!hasLoadedThisSession) return;`)
+// short-circuits and nothing gets re-uploaded. The initial-load effect will
+// naturally set `hasLoadedThisSession` back to true (and re-arm autosave)
+// the next time this hook mounts for a signed-in session — e.g. after the
+// user signs back in, or on their next visit to /garden or /settings.
+export function markAccountDataDeleted() {
+  hasLoadedThisSession = false;
+  if (pendingSaveTimeout) {
+    clearTimeout(pendingSaveTimeout);
+    pendingSaveTimeout = null;
+  }
+}
 async function fetchGardenState(): Promise<GardenState | null> {
   const response = await fetch("/api/garden");
   if (!response.ok) throw new Error("Failed to load garden state");

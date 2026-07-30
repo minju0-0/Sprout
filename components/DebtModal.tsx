@@ -1,20 +1,23 @@
 "use client";
+
 import { useState, type FormEvent } from "react";
 import { X } from "lucide-react";
 import type { Debt } from "@/types";
+
 export type DebtModalState = { mode: "add" } | { mode: "edit"; debt: Debt };
+
 interface DebtModalProps {
   state: DebtModalState;
   onClose: () => void;
   onSubmit: (values: Omit<Debt, "id" | "currentAmount">) => void;
 }
+
 export function DebtModal({ state, onClose, onSubmit }: DebtModalProps) {
   const editing = state.mode === "edit" ? state.debt : null;
   const [name, setName] = useState(editing?.name ?? "");
-  const [startingAmount, setStartingAmount] = useState(
-    editing ? String(editing.startingAmount) : "",
-  );
+  const [startingAmount, setStartingAmount] = useState(editing ? String(editing.startingAmount) : "");
   const [error, setError] = useState<string | null>(null);
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const parsedAmount = Number(startingAmount);
@@ -26,8 +29,15 @@ export function DebtModal({ state, onClose, onSubmit }: DebtModalProps) {
       setError("Amount owed must be a number greater than 0.");
       return;
     }
+    if (editing && parsedAmount < editing.currentAmount) {
+      setError(
+        `Starting amount can't be less than the ${editing.currentAmount} already remaining. Log a payment instead if the balance actually dropped.`,
+      );
+      return;
+    }
     onSubmit({ name: name.trim(), startingAmount: parsedAmount });
   }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4"
@@ -37,7 +47,7 @@ export function DebtModal({ state, onClose, onSubmit }: DebtModalProps) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-3xl bg-card p-6 shadow-lg"
+        className="w-full max-w-sm rounded-2xl bg-card p-6 shadow-lg"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-5 flex items-start justify-between">
@@ -48,14 +58,14 @@ export function DebtModal({ state, onClose, onSubmit }: DebtModalProps) {
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-full p-1 text-ink-soft transition-colors hover:bg-moss/10 hover:text-ink active:bg-moss/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-moss"
+            className="rounded-full p-1 text-ink-soft transition-colors hover:bg-moss/10 hover:text-ink"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
-            <label htmlFor="debt-name" className="text-xs text-ink-soft">
+            <label htmlFor="debt-name" className="text-xs font-semibold tracking-wide text-ink-soft uppercase">
               Name
             </label>
             <input
@@ -63,13 +73,13 @@ export function DebtModal({ state, onClose, onSubmit }: DebtModalProps) {
               type="text"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Credit Card"
+              placeholder="e.g. Credit Card"
               className="rounded-lg border border-moss/20 bg-canvas px-3 py-2 text-sm text-ink"
               autoFocus
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label htmlFor="debt-amount" className="text-xs text-ink-soft">
+            <label htmlFor="debt-amount" className="text-xs font-semibold tracking-wide text-ink-soft uppercase">
               Total owed
             </label>
             <input
@@ -79,7 +89,7 @@ export function DebtModal({ state, onClose, onSubmit }: DebtModalProps) {
               step="0.01"
               value={startingAmount}
               onChange={(event) => setStartingAmount(event.target.value)}
-              placeholder="2500"
+              placeholder="$0.00"
               className="rounded-lg border border-moss/20 bg-canvas px-3 py-2 font-data text-sm text-ink"
             />
             {editing && (
@@ -93,13 +103,13 @@ export function DebtModal({ state, onClose, onSubmit }: DebtModalProps) {
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg px-3 py-1.5 text-sm font-semibold text-ink-soft transition-colors hover:bg-moss/10 active:bg-moss/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-moss"
+              className="rounded-lg border border-moss/20 px-3 py-1.5 text-sm font-semibold text-ink-soft transition-colors hover:bg-moss/10"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-moss px-4 py-1.5 text-sm font-semibold text-canvas transition-colors hover:bg-moss-light active:bg-moss-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-moss"
+              className="rounded-lg bg-moss px-4 py-1.5 text-sm font-semibold text-canvas transition-colors hover:bg-moss-light"
             >
               {editing ? "Save" : "Track it"}
             </button>

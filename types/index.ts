@@ -1,10 +1,18 @@
+export interface ContributionEntry {
+  id: string;
+  amount: number;
+  date: string; // YYYY-MM-DD
+}
+
 export type PlantGrowthStage = "thriving" | "steady" | "wilting" | "overgrown";
+
 export type PlantSpecies =
   | "tomato"
   | "sunflower"
   | "succulent"
   | "fern"
   | "berry-bush";
+
 export interface BudgetCategory {
   id: string;
   name: string;
@@ -12,6 +20,7 @@ export interface BudgetCategory {
   spent: number;
   species: PlantSpecies;
 }
+
 export interface Transaction {
   id: string;
   categoryId: string;
@@ -20,12 +29,16 @@ export interface Transaction {
   date: string;
   isRecurring?: boolean;
 }
+
 export interface Goal {
   id: string;
   name: string;
   targetAmount: number;
   currentAmount: number;
+  targetDate?: string;
+  history?: ContributionEntry[];
 }
+
 export interface Debt {
   id: string;
   name: string;
@@ -33,25 +46,34 @@ export interface Debt {
   startingAmount: number;
   /** What's left to pay off. Decreases toward 0 as payments are logged. */
   currentAmount: number;
+  history?: ContributionEntry[];
 }
+
 export type GardenHealthStatus = "unplanted" | "sunny" | "cloudy" | "storm";
+
 export interface HarvestRecord {
   season: string;
   categories: BudgetCategory[];
   gardenHealth: GardenHealthStatus;
 }
+
 export interface AdvisorNote {
   id: string;
   categoryId?: string;
   message: string;
 }
+
 export interface AdvisorAnswer {
   categoryId?: string;
   message: string;
 }
+
 export type SyncStatus = "idle" | "saving" | "saved" | "error";
+
 export type MoneyPocket = string | "unallocated";
+
 export type AllocationEventType = "income" | "fill" | "transfer";
+
 export interface AllocationEvent {
   id: string;
   type: AllocationEventType;
@@ -61,6 +83,7 @@ export interface AllocationEvent {
   note?: string;
   date: string;
 }
+
 export interface GardenState {
   categories: BudgetCategory[];
   transactions: Transaction[];

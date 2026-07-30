@@ -1,11 +1,18 @@
 "use client";
+
 import { useState } from "react";
+import { Plus, Sparkles, PartyPopper, Scissors, Pencil, Trash2 } from "lucide-react";
 import { useBudgetStore } from "@/store/budgetStore";
-import { GoalGrove } from "@/components/GoalGrove";
 import { GoalModal, type GoalModalState } from "@/components/GoalModal";
-import { DebtPile } from "@/components/DebtPile";
 import { DebtModal, type DebtModalState } from "@/components/DebtModal";
+import { HistoryModal } from "@/components/HistoryModal";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { CardSkeleton } from "@/components/Skeleton";
+import { GoalTree } from "@/components/GoalTree";
+import { DebtBoulder } from "@/components/DebtBoulder";
+import { formatCurrency } from "@/lib/currency";
+import type { Goal, Debt } from "@/types";
+
 export default function GoalsPage() {
   const hasHydrated = useBudgetStore((state) => state.hasHydrated);
   const goals = useBudgetStore((state) => state.goals);
@@ -14,47 +21,377 @@ export default function GoalsPage() {
   const addContribution = useBudgetStore((state) => state.addContribution);
   const addGoal = useBudgetStore((state) => state.addGoal);
   const updateGoal = useBudgetStore((state) => state.updateGoal);
+  const deleteGoal = useBudgetStore((state) => state.deleteGoal);
   const addDebt = useBudgetStore((state) => state.addDebt);
   const updateDebt = useBudgetStore((state) => state.updateDebt);
+  const deleteDebt = useBudgetStore((state) => state.deleteDebt);
   const addDebtPayment = useBudgetStore((state) => state.addDebtPayment);
+
   const [goalModal, setGoalModal] = useState<GoalModalState | null>(null);
   const [debtModal, setDebtModal] = useState<DebtModalState | null>(null);
+  const [historyModal, setHistoryModal] = useState<
+    { type: "goal"; goal: Goal } | { type: "debt"; debt: Debt } | null
+  >(null);
+  const [confirmDeleteGoal, setConfirmDeleteGoal] = useState<Goal | null>(null);
+  const [confirmDeleteDebt, setConfirmDeleteDebt] = useState<Debt | null>(null);
+
+  const [goalAmounts, setGoalAmounts] = useState<Record<string, string>>({});
+  const [debtAmounts, setDebtAmounts] = useState<Record<string, string>>({});
+
+  const activeGoalsCount = goals.filter((g) => g.currentAmount < g.targetAmount).length;
+  const activeDebtsCount = debts.filter((d) => d.currentAmount > 0).length;
+
+  const handleGoalSubmit = (e: React.FormEvent, goalId: string) => {
+    e.preventDefault();
+    const val = Number(goalAmounts[goalId]);
+    if (!Number.isFinite(val) || val <= 0) return;
+    addContribution(goalId, val);
+    setGoalAmounts((prev) => ({ ...prev, [goalId]: "" }));
+  };
+
+  const handleDebtSubmit = (e: React.FormEvent, debtId: string) => {
+    e.preventDefault();
+    const val = Number(debtAmounts[debtId]);
+    if (!Number.isFinite(val) || val <= 0) return;
+    addDebtPayment(debtId, val);
+    setDebtAmounts((prev) => ({ ...prev, [debtId]: "" }));
+  };
+
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-6 py-12 sm:px-8">
-      <header className="flex flex-col gap-1">
-        <h1 className="font-display text-3xl text-ink">Goals</h1>
-        <p className="text-sm text-ink-soft">
-          Every savings goal grows its own tree toward its target — every debt shrinks toward
-          zero.
-        </p>
+    <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8 sm:px-10">
+      {/* Top Header */}
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="font-display text-3xl font-bold text-ink">Goals & Debts</h1>
+          <p className="mt-0.5 text-sm text-ink-soft">
+            {goals.length} savings goal{goals.length === 1 ? "" : "s"} · {debts.length} debt
+            {debts.length === 1 ? "" : "s"} in progress
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setDebtModal({ mode: "add" })}
+            className="flex items-center gap-1.5 rounded-xl border border-moss/20 bg-card px-4 py-2 text-sm font-semibold text-ink shadow-sm transition-colors hover:bg-canvas"
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Add debt
+          </button>
+          <button
+            type="button"
+            onClick={() => setGoalModal({ mode: "add" })}
+            className="flex items-center gap-1.5 rounded-xl bg-moss px-4 py-2 text-sm font-semibold text-canvas shadow-sm transition-colors hover:bg-moss-light"
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Add goal
+          </button>
+        </div>
       </header>
+
       {!hasHydrated ? (
-        <div
-          className="grid grid-cols-1 gap-4 sm:grid-cols-2"
-          aria-busy="true"
-          aria-label="Loading your goals"
-        >
-          <CardSkeleton bodyHeight="h-48" />
-          <CardSkeleton bodyHeight="h-48" />
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <CardSkeleton bodyHeight="h-56" />
+          <CardSkeleton bodyHeight="h-56" />
         </div>
       ) : (
-        <>
-          <GoalGrove
-            goals={goals}
-            currencyCode={currencyCode}
-            onContribute={addContribution}
-            onAddGoal={() => setGoalModal({ mode: "add" })}
-            onEditGoal={(goal) => setGoalModal({ mode: "edit", goal })}
-          />
-          <DebtPile
-            debts={debts}
-            currencyCode={currencyCode}
-            onPay={addDebtPayment}
-            onAddDebt={() => setDebtModal({ mode: "add" })}
-            onEditDebt={(debt) => setDebtModal({ mode: "edit", debt })}
-          />
-        </>
+        <div className="flex flex-col gap-10">
+          {/* Savings Goals Section */}
+          <section aria-label="Savings Goals">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-ink">Savings Goals</h2>
+              <span className="rounded-full bg-moss/10 px-2.5 py-0.5 text-xs font-semibold text-moss">
+                {activeGoalsCount} active
+              </span>
+            </div>
+
+            {goals.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-moss/20 p-8 text-center text-sm text-ink-soft">
+                No savings goals created yet.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                {goals.map((goal) => {
+                  const complete = goal.currentAmount >= goal.targetAmount;
+                  const remaining = Math.max(0, goal.targetAmount - goal.currentAmount);
+
+                  return (
+                    /* Entire Card is clickable */
+                    <div
+                      key={goal.id}
+                      onClick={() => setHistoryModal({ type: "goal", goal })}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) =>
+                        e.key === "Enter" && setHistoryModal({ type: "goal", goal })
+                      }
+                      aria-label={`View contribution history for ${goal.name}`}
+                      className="group flex flex-col sm:flex-row items-center gap-6 rounded-2xl border border-moss/10 bg-card p-6 shadow-sm transition-all hover:border-moss/30 hover:shadow-md cursor-pointer"
+                    >
+                      {/* Left Graphic */}
+                      <div className="shrink-0 flex items-center justify-center self-center my-auto p-2 scale-110 -translate-y-1 transform-gpu [&>div>div.text-center]:hidden [&>div>form]:hidden">
+                        <GoalTree
+                          goal={goal}
+                          currencyCode={currencyCode}
+                          onContribute={() => {}}
+                          onEdit={() => {}}
+                        />
+                      </div>
+
+                      {/* Right Details & Controls */}
+                      <div className="flex flex-1 flex-col justify-between self-stretch gap-4 min-w-0">
+                        <div>
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-moss">
+                                Savings Goal
+                              </span>
+                              <h3 className="flex items-center gap-1.5 text-base font-bold text-ink group-hover:text-moss transition-colors">
+                                {goal.name}
+                                {complete && (
+                                  <Sparkles className="h-4 w-4 text-marigold" aria-hidden="true" />
+                                )}
+                              </h3>
+                            </div>
+
+                            {/* Action Buttons: Stop propagation so they don't trigger history modal */}
+                            <div
+                              className="flex items-center gap-1.5"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => setGoalModal({ mode: "edit", goal })}
+                                className="rounded p-1 text-ink-soft hover:text-moss transition-colors"
+                                aria-label={`Edit ${goal.name}`}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteGoal(goal)}
+                                className="rounded p-1 text-ink-soft hover:text-rust transition-colors"
+                                aria-label={`Delete ${goal.name}`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 space-y-1.5 font-data text-xs text-ink-soft">
+                            <div className="flex justify-between">
+                              <span>Saved:</span>
+                              <span className="font-semibold text-moss">
+                                {formatCurrency(goal.currentAmount, currencyCode)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Target:</span>
+                              <span className="font-semibold text-ink">
+                                {formatCurrency(goal.targetAmount, currencyCode)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-moss/10 pt-3">
+                          {complete ? (
+                            <span className="font-data text-xs font-semibold text-moss">
+                              🎉 Goal Achieved!
+                            </span>
+                          ) : (
+                            <div className="space-y-2">
+                              <p className="font-data text-[11px] text-ink-soft">
+                                <strong className="text-ink">
+                                  {formatCurrency(remaining, currencyCode)}
+                                </strong>{" "}
+                                remaining
+                              </p>
+                              {/* Form: Stop propagation so typing & clicking 'Add' works smoothly */}
+                              <form
+                                onSubmit={(e) => handleGoalSubmit(e, goal.id)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex gap-1.5"
+                              >
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={goalAmounts[goal.id] || ""}
+                                  onChange={(e) =>
+                                    setGoalAmounts({ ...goalAmounts, [goal.id]: e.target.value })
+                                  }
+                                  placeholder="Add $"
+                                  className="w-full min-w-0 rounded-lg border border-moss/20 bg-canvas px-2.5 py-1 font-data text-xs text-ink focus:outline-none focus:ring-2 focus:ring-moss/40"
+                                />
+                                <button
+                                  type="submit"
+                                  className="shrink-0 rounded-lg bg-moss px-3 py-1 text-xs font-semibold text-canvas transition-colors hover:bg-moss-light"
+                                >
+                                  Add
+                                </button>
+                              </form>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* Debt Boulders Section */}
+          <section aria-label="Debt Boulders">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-ink">Debt Boulders</h2>
+              <span className="rounded-full bg-rust/10 px-2.5 py-0.5 text-xs font-semibold text-rust">
+                {activeDebtsCount} active
+              </span>
+            </div>
+
+            {debts.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-moss/20 p-8 text-center text-sm text-ink-soft">
+                No debt boulders tracked yet.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                {debts.map((debt) => {
+                  const paidOff = debt.currentAmount === 0;
+                  const paidAmount = Math.max(0, debt.startingAmount - debt.currentAmount);
+
+                  return (
+                    /* Entire Card is clickable */
+                    <div
+                      key={debt.id}
+                      onClick={() => setHistoryModal({ type: "debt", debt })}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) =>
+                        e.key === "Enter" && setHistoryModal({ type: "debt", debt })
+                      }
+                      aria-label={`View payment history for ${debt.name}`}
+                      className="group flex flex-col sm:flex-row items-center gap-6 rounded-2xl border border-moss/10 bg-card p-6 shadow-sm transition-all hover:border-moss/30 hover:shadow-md cursor-pointer"
+                    >
+                      {/* Left Graphic */}
+                      <div className="shrink-0 flex items-center justify-center self-center my-auto p-2 scale-125 -translate-y-5 transform-gpu [&>div>div.text-center]:hidden [&>div>form]:hidden">
+                        <DebtBoulder
+                          debt={debt}
+                          currencyCode={currencyCode}
+                          onPay={() => {}}
+                          onEdit={() => {}}
+                        />
+                      </div>
+
+                      {/* Right Details & Controls */}
+                      <div className="flex flex-1 flex-col justify-between self-stretch gap-4 min-w-0">
+                        <div>
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-rust">
+                                Debt Reduction
+                              </span>
+                              <h3 className="flex items-center gap-1.5 text-base font-bold text-ink group-hover:text-rust transition-colors">
+                                {debt.name}
+                                {paidOff ? (
+                                  <PartyPopper className="h-4 w-4 text-marigold" aria-hidden="true" />
+                                ) : (
+                                  <Scissors className="h-4 w-4 text-rust" aria-hidden="true" />
+                                )}
+                              </h3>
+                            </div>
+
+                            {/* Action Buttons: Stop propagation */}
+                            <div
+                              className="flex items-center gap-1.5"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => setDebtModal({ mode: "edit", debt })}
+                                className="rounded p-1 text-ink-soft hover:text-moss transition-colors"
+                                aria-label={`Edit ${debt.name}`}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteDebt(debt)}
+                                className="rounded p-1 text-ink-soft hover:text-rust transition-colors"
+                                aria-label={`Delete ${debt.name}`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 space-y-1.5 font-data text-xs text-ink-soft">
+                            <div className="flex justify-between">
+                              <span>Remaining:</span>
+                              <span className="font-semibold text-rust">
+                                {formatCurrency(debt.currentAmount, currencyCode)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Starting:</span>
+                              <span className="font-semibold text-ink">
+                                {formatCurrency(debt.startingAmount, currencyCode)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-moss/10 pt-3">
+                          {paidOff ? (
+                            <span className="font-data text-xs font-semibold text-moss">
+                              🌸 Debt Paid Off!
+                            </span>
+                          ) : (
+                            <div className="space-y-2">
+                              <p className="font-data text-[11px] text-ink-soft">
+                                <strong className="text-moss">
+                                  {formatCurrency(paidAmount, currencyCode)}
+                                </strong>{" "}
+                                paid down
+                              </p>
+                              {/* Form: Stop propagation */}
+                              <form
+                                onSubmit={(e) => handleDebtSubmit(e, debt.id)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex gap-1.5"
+                              >
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={debtAmounts[debt.id] || ""}
+                                  onChange={(e) =>
+                                    setDebtAmounts({ ...debtAmounts, [debt.id]: e.target.value })
+                                  }
+                                  placeholder="Pay $"
+                                  className="w-full min-w-0 rounded-lg border border-moss/20 bg-canvas px-2.5 py-1 font-data text-xs text-ink focus:outline-none focus:ring-2 focus:ring-moss/40"
+                                />
+                                <button
+                                  type="submit"
+                                  className="shrink-0 rounded-lg bg-moss px-3 py-1 text-xs font-semibold text-canvas transition-colors hover:bg-moss-light"
+                                >
+                                  Pay
+                                </button>
+                              </form>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </div>
       )}
+
+      {/* Modals */}
       {goalModal && (
         <GoalModal
           state={goalModal}
@@ -81,6 +418,56 @@ export default function GoalsPage() {
             }
             setDebtModal(null);
           }}
+        />
+      )}
+      {historyModal?.type === "goal" && (
+        <HistoryModal
+          title={`${historyModal.goal.name} — Contributions`}
+          subtitle={`${formatCurrency(
+            historyModal.goal.currentAmount,
+            currencyCode
+          )} saved of ${formatCurrency(historyModal.goal.targetAmount, currencyCode)}`}
+          entries={historyModal.goal.history ?? []}
+          currencyCode={currencyCode}
+          accentClassName="text-moss"
+          emptyLabel="No contributions logged yet."
+          onClose={() => setHistoryModal(null)}
+        />
+      )}
+      {historyModal?.type === "debt" && (
+        <HistoryModal
+          title={`${historyModal.debt.name} — Payments`}
+          subtitle={`${formatCurrency(
+            historyModal.debt.currentAmount,
+            currencyCode
+          )} remaining of ${formatCurrency(historyModal.debt.startingAmount, currencyCode)}`}
+          entries={historyModal.debt.history ?? []}
+          currencyCode={currencyCode}
+          accentClassName="text-rust"
+          emptyLabel="No payments logged yet."
+          onClose={() => setHistoryModal(null)}
+        />
+      )}
+      {confirmDeleteGoal && (
+        <ConfirmDialog
+          title="Delete goal?"
+          description={`This removes ${confirmDeleteGoal.name} and its saved progress.`}
+          onConfirm={() => {
+            deleteGoal(confirmDeleteGoal.id);
+            setConfirmDeleteGoal(null);
+          }}
+          onClose={() => setConfirmDeleteGoal(null)}
+        />
+      )}
+      {confirmDeleteDebt && (
+        <ConfirmDialog
+          title="Delete debt?"
+          description={`This removes ${confirmDeleteDebt.name} and its payment history.`}
+          onConfirm={() => {
+            deleteDebt(confirmDeleteDebt.id);
+            setConfirmDeleteDebt(null);
+          }}
+          onClose={() => setConfirmDeleteDebt(null)}
         />
       )}
     </main>

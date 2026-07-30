@@ -1,16 +1,15 @@
+// lib/upcomingBills.ts
 import type { Transaction } from "@/types";
+import { getLocalDateString } from "@/lib/transactions";
 export interface UpcomingBillsResult {
   upcoming: Transaction[];
   posted: Transaction[];
-}
-function todayIso(today: Date): string {
-  return today.toISOString().slice(0, 10);
 }
 export function getUpcomingBills(
   transactions: Transaction[],
   today: Date = new Date(),
 ): UpcomingBillsResult {
-  const todayStr = todayIso(today);
+  const todayStr = getLocalDateString(today);
   const recurring = transactions.filter((transaction) => transaction.isRecurring);
   const upcoming = recurring
     .filter((transaction) => transaction.date > todayStr)
