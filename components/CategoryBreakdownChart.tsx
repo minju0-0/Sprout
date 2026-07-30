@@ -3,18 +3,29 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import type { BudgetCategory } from "@/types";
 import { plantTypeMap } from "@/constants/gardenAssets";
 import { formatCurrency } from "@/lib/currency";
+
 interface CategoryBreakdownChartProps {
   categories: BudgetCategory[];
   currencyCode: string | null;
 }
+
 export function CategoryBreakdownChart({ categories, currencyCode }: CategoryBreakdownChartProps) {
-  const data = categories
-    .filter((category) => category.spent > 0)
-    .map((category) => ({
+  const filteredCategories = categories.filter((category) => category.spent > 0);
+
+  // 1. Compute total spending
+  const totalSpent = filteredCategories.reduce((sum, cat) => sum + cat.spent, 0);
+
+  // 2. Compute percentages for each item
+  const data = filteredCategories.map((category) => {
+    const percentage = totalSpent > 0 ? Math.round((category.spent / totalSpent) * 100) : 0;
+    return {
       name: category.name,
       value: category.spent,
+      percentage,
       color: plantTypeMap[category.species]?.stages.thriving.accent ?? "#3f6b3a",
-    }));
+    };
+  });
+
   if (data.length === 0) {
     return (
       <p className="flex h-[260px] items-center justify-center text-center text-sm text-ink-soft">
@@ -22,9 +33,11 @@ export function CategoryBreakdownChart({ categories, currencyCode }: CategoryBre
       </p>
     );
   }
+
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-      <div className="h-[220px] w-full sm:w-1/2">
+      {/* Set relative positioning on the chart wrapper */}
+      <div className="relative h-[220px] w-full sm:w-1/2">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -51,7 +64,16 @@ export function CategoryBreakdownChart({ categories, currencyCode }: CategoryBre
             />
           </PieChart>
         </ResponsiveContainer>
+
+        {/* Center overlay label */}
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+          <span className="font-data text-base font-bold text-ink">
+            {formatCurrency(totalSpent, currencyCode)}
+          </span>
+          <span className="text-xs text-ink-soft">total spent</span>
+        </div>
       </div>
+
       <ul className="flex flex-1 flex-col gap-2">
         {data.map((entry) => (
           <li key={entry.name} className="flex items-center justify-between gap-3 text-sm">
@@ -63,9 +85,10 @@ export function CategoryBreakdownChart({ categories, currencyCode }: CategoryBre
               />
               {entry.name}
             </span>
-            <span className="font-data text-xs text-ink-soft">
-              {formatCurrency(entry.value, currencyCode)}
-            </span>
+            <div className="flex items-center gap-3 font-data text-xs text-ink-soft">
+              <span>{entry.percentage}%</span>
+              <span>{formatCurrency(entry.value, currencyCode)}</span>
+            </div>
           </li>
         ))}
       </ul>

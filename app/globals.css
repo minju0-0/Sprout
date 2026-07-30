@@ -1,46 +1,321 @@
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
+
+/*
+  Design tokens. Every token that already existed (moss, moss-100, moss-300,
+  moss-light, moss-700, moss-900, rust, rust-100, ... card, canvas, bed,
+  ink, ink-soft, storm, sky-soft, font-display/body/data) is KEPT so every
+  existing `bg-moss`, `text-ink-soft`, `border-moss/20`, `font-display`
+  className in the app keeps working unchanged. New tokens are additive:
+  a fuller 50–800 scale per color, plus a few new neutrals for the
+  elevation/illustration system (Phase 8.1 of SPROUT_ROADMAP_V2.md).
+*/
 @theme {
-  --color-canvas: #eef1e4;
-  --color-bed: #e2e8d2;
-  --color-soil: #5b4636;
-  --color-ink: #262a1f;
-  --color-ink-soft: #5c6152;
+  /* Moss — primary / positive / brand green */
+  --color-moss-50: #f0f6ee;
   --color-moss-100: #dce4dc;
+  --color-moss-200: #afd3a8;
   --color-moss-300: #95ae93;
+  --color-moss-400: #55964e;
   --color-moss: #3f6b3a;
   --color-moss-light: #6a9a5f;
+  --color-moss-600: #32562f;
   --color-moss-700: #31532d;
+  --color-moss-800: #1a2c18;
   --color-moss-900: #233b20;
+
+  /* Rust — danger / overspend */
+  --color-rust-50: #fdf1ee;
   --color-rust-100: #f2e0dc;
+  --color-rust-200: #f1ad9b;
   --color-rust-300: #d6a293;
   --color-rust: #b5553a;
+  --color-rust-600: #90412e;
   --color-rust-700: #8d422d;
   --color-rust-900: #642f20;
+
+  /* Marigold — warm accent */
+  --color-marigold-50: #fef9ee;
   --color-marigold-100: #fbeedc;
+  --color-marigold-200: #f9cc88;
   --color-marigold-300: #f2cc94;
   --color-marigold: #e8a33d;
+  --color-marigold-600: #be7d1a;
   --color-marigold-700: #b57f30;
   --color-marigold-900: #805a22;
+
+  /* Sky — secondary / info */
+  --color-sky-50: #eef3f8;
   --color-sky-100: #e1e9ef;
+  --color-sky-200: #a1c5dc;
   --color-sky-300: #a5bbce;
   --color-sky: #5b84a6;
   --color-sky-soft: #cbdae4;
+  --color-sky-600: #48698a;
   --color-sky-700: #476781;
   --color-sky-900: #32495b;
+
+  /* Clay — tertiary accent */
+  --color-clay-50: #f7f0f2;
   --color-clay-100: #eae2e4;
   --color-clay-300: #bfa6ae;
   --color-clay: #8b5e6b;
   --color-clay-700: #6c4953;
   --color-clay-900: #4c343b;
+
   --color-storm: #4a5568;
+
+  /* Neutrals / surfaces */
+  --color-canvas: #eef1e4;
+  --color-canvas-dark: #e2e6d5;
+  --color-bed: #e2e8d2;
   --color-card: #f7f8f0;
-  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
-    sans-serif;
+  --color-card-raised: #ffffff;
+  --color-ink: #262a1f;
+  --color-ink-soft: #5c6152;
+  --color-ink-faint: #8a9080;
+  --color-soil: #5b4636;
+  --color-soil-light: #7a6050;
+  --color-soil-dark: #3d2e1e;
+  --color-soil: #5b4636;
+
+  /* Typography — Lora (display) / DM Sans (body) / IBM Plex Mono (data) */
+  --font-display: "Lora", "Iowan Old Style", Georgia, serif;
+  --font-body: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-data: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
+
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   background-color: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+/* ── Elevation system (Phase 8.1) ─────────────────────────────────────── */
+.elevation-0 { box-shadow: none; }
+.elevation-1 { box-shadow: 0 1px 3px rgba(38, 42, 31, 0.07), 0 1px 2px rgba(38, 42, 31, 0.04); }
+.elevation-2 { box-shadow: 0 4px 14px rgba(38, 42, 31, 0.11), 0 2px 5px rgba(38, 42, 31, 0.06); }
+.elevation-3 { box-shadow: 0 10px 32px rgba(38, 42, 31, 0.15), 0 4px 10px rgba(38, 42, 31, 0.08); }
+.elevation-modal { box-shadow: 0 24px 72px rgba(38, 42, 31, 0.22), 0 6px 20px rgba(38, 42, 31, 0.1); }
+
+.card-hover {
+  transition: box-shadow 180ms ease, transform 180ms ease;
+}
+.card-hover:hover {
+  box-shadow: 0 4px 14px rgba(38, 42, 31, 0.11), 0 2px 5px rgba(38, 42, 31, 0.06);
+  transform: translateY(-1px);
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 8px;
+  padding: 10px 18px;
+  cursor: pointer;
+  border: none;
+  transition: all 150ms ease;
+  white-space: nowrap;
+}
+.btn:disabled { cursor: not-allowed; opacity: 0.6; }
+.btn-primary { background: var(--color-moss); color: #fff; }
+.btn-primary:hover { background: var(--color-moss-light); }
+.btn-primary:active { background: var(--color-moss-700); }
+.btn-secondary {
+  background: transparent;
+  color: var(--color-moss-600);
+  border: 1.5px solid var(--color-moss-400);
+}
+.btn-secondary:hover { background: var(--color-moss-50); border-color: var(--color-moss); }
+.btn-ghost { background: transparent; color: var(--color-ink-soft); padding: 8px 12px; }
+.btn-ghost:hover { background: rgba(38, 42, 31, 0.05); color: var(--color-ink); }
+.btn-danger { background: var(--color-rust); color: #fff; }
+.btn-danger:hover { background: var(--color-rust-600); }
+.btn-sm { font-size: 12px; padding: 6px 12px; border-radius: 6px; }
+.btn-lg { font-size: 16px; padding: 14px 28px; border-radius: 10px; }
+
+*:focus-visible { outline: 2px solid var(--color-moss); outline-offset: 2px; }
+
+/* ── Chips ─────────────────────────────────────────────────────────────── */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-body);
+  padding: 3px 8px;
+  border-radius: 100px;
+  line-height: 1;
+}
+.chip-moss { background: var(--color-moss-100); color: var(--color-moss-700); }
+.chip-rust { background: var(--color-rust-100); color: var(--color-rust-700); }
+.chip-marigold { background: var(--color-marigold-100); color: var(--color-marigold-700); }
+.chip-sky { background: var(--color-sky-100); color: var(--color-sky-700); }
+.chip-clay { background: var(--color-clay-100); color: var(--color-clay-700); }
+
+/* ── Money / stat figures ──────────────────────────────────────────────── */
+.stat-amount {
+  font-family: var(--font-data);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.stat-amount-sm {
+  font-family: var(--font-data);
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.amount {
+  font-family: var(--font-data);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Table ─────────────────────────────────────────────────────────────── */
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-ink-faint);
+  padding: 10px 16px;
+  text-align: left;
+  border-bottom: 1px solid rgba(38, 42, 31, 0.07);
+  position: sticky;
+  top: 0;
+  background: var(--color-card);
+  z-index: 1;
+}
+.data-table th.right { text-align: right; }
+.data-table td {
+  padding: 12px 16px;
+  font-size: 13.5px;
+  color: var(--color-ink);
+  border-bottom: 1px solid rgba(38, 42, 31, 0.04);
+  vertical-align: middle;
+}
+.data-table td.right { text-align: right; }
+.data-table tbody tr { transition: background 120ms ease; }
+.data-table tbody tr:hover { background: rgba(63, 107, 58, 0.04); }
+.data-table tbody tr:last-child td { border-bottom: none; }
+
+/* ── Forms ─────────────────────────────────────────────────────────────── */
+.form-input {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--color-ink);
+  background: var(--color-card-raised);
+  border: 1.5px solid rgba(38, 42, 31, 0.14);
+  border-radius: 8px;
+  padding: 10px 14px;
+  width: 100%;
+  transition: border-color 150ms, box-shadow 150ms;
+  outline: none;
+}
+.form-input:focus {
+  border-color: var(--color-moss-400);
+  box-shadow: 0 0 0 3px rgba(63, 107, 58, 0.12);
+}
+.form-input::placeholder { color: var(--color-ink-faint); }
+.form-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--color-ink-soft);
+  margin-bottom: 6px;
+  display: block;
+}
+
+/* ── Progress ──────────────────────────────────────────────────────────── */
+.progress-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(38, 42, 31, 0.08);
+  border-radius: 100px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 100px;
+  transition: width 600ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ── Modals ────────────────────────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(38, 42, 31, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.modal-panel {
+  background: var(--color-card-raised);
+  border-radius: 16px;
+  padding: 28px;
+  max-width: 480px;
+  width: 100%;
+  animation: modal-in 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-panel { animation: none; }
+}
+
+/* ── Weather banner ────────────────────────────────────────────────────── */
+.weather-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.weather-sunny { background: var(--color-marigold-100); color: var(--color-marigold-700); }
+.weather-cloudy { background: var(--color-sky-100); color: var(--color-sky-700); }
+.weather-storm { background: var(--color-rust-100); color: var(--color-rust-700); }
+.weather-unplanted { background: var(--color-moss-100); color: var(--color-moss-700); }
+
+/* ── Weed / droop micro-animations ─────────────────────────────────────── */
+@keyframes sway {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+.weed-sway { animation: sway 2.4s ease-in-out infinite; transform-origin: bottom center; }
+@media (prefers-reduced-motion: reduce) {
+  .weed-sway { animation: none; }
+}
+
+/* ── Scrollbars: hidden by default, faint on hover ────────────────────── */
+.scrollable { scrollbar-width: none; }
+.scrollable::-webkit-scrollbar { width: 0; height: 0; }
+.scrollable:hover { scrollbar-width: thin; scrollbar-color: var(--color-canvas-dark) transparent; }
+.scrollable:hover::-webkit-scrollbar { width: 4px; }
+.scrollable:hover::-webkit-scrollbar-thumb { background: var(--color-canvas-dark); border-radius: 4px; }

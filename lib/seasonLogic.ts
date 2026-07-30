@@ -1,5 +1,6 @@
 import type { BudgetCategory, HarvestRecord, Transaction } from "@/types";
 import { getGardenHealth } from "@/lib/gardenLogic";
+
 const MONTH_NAMES = [
   "January",
   "February",
@@ -14,9 +15,11 @@ const MONTH_NAMES = [
   "November",
   "December",
 ];
+
 export function getCurrentSeasonLabel(date: Date = new Date()): string {
   return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(date);
 }
+
 export function getNextSeasonLabel(currentLabel: string): string {
   const [monthName, yearString] = currentLabel.split(" ");
   const monthIndex = MONTH_NAMES.indexOf(monthName);
@@ -28,6 +31,7 @@ export function getNextSeasonLabel(currentLabel: string): string {
   const nextYear = monthIndex === 11 ? year + 1 : year;
   return `${MONTH_NAMES[nextMonthIndex]} ${nextYear}`;
 }
+
 export function createHarvestRecord(
   season: string,
   categories: BudgetCategory[],
@@ -38,9 +42,11 @@ export function createHarvestRecord(
     gardenHealth: getGardenHealth(categories),
   };
 }
+
 export function resetCategoriesForNewSeason(categories: BudgetCategory[]): BudgetCategory[] {
   return categories.map((category) => ({ ...category, spent: 0 }));
 }
+
 function getSeasonStartDate(seasonLabel: string): string {
   const [monthName, yearString] = seasonLabel.split(" ");
   const monthIndex = MONTH_NAMES.indexOf(monthName);
@@ -51,10 +57,12 @@ function getSeasonStartDate(seasonLabel: string): string {
   const month = String(monthIndex + 1).padStart(2, "0");
   return `${year}-${month}-01`;
 }
+
 export interface RecurringCarryForwardResult {
   transactions: Transaction[];
   categories: BudgetCategory[];
 }
+
 export function carryForwardRecurringTransactions(
   outgoingTransactions: Transaction[],
   resetCategories: BudgetCategory[],
@@ -87,31 +95,39 @@ export function carryForwardRecurringTransactions(
   }
   return { transactions: carriedTransactions, categories };
 }
+
 export interface SeasonRolloverResult {
   activeSeason: string;
   categories: BudgetCategory[];
   harvestHistory: HarvestRecord[];
+  transactions: Transaction[];
   rolledOver: boolean;
 }
+
 export function catchUpSeason(
   activeSeason: string,
   categories: BudgetCategory[],
   harvestHistory: HarvestRecord[],
+  transactions: Transaction[] = [],
   now: Date = new Date(),
 ): SeasonRolloverResult {
   const nowLabel = getCurrentSeasonLabel(now);
   if (activeSeason === nowLabel) {
-    return { activeSeason, categories, harvestHistory, rolledOver: false };
+    return { activeSeason, categories, harvestHistory, transactions, rolledOver: false };
   }
   const newHarvests: HarvestRecord[] = [];
   let currentCategories = categories;
   let currentSeason = activeSeason;
+  let currentTransactions = transactions;
   let iterations = 0;
   while (currentSeason !== nowLabel && iterations < 24) {
     newHarvests.push(createHarvestRecord(currentSeason, currentCategories));
-    currentCategories = resetCategoriesForNewSeason(currentCategories);
     const next = getNextSeasonLabel(currentSeason);
     if (next === currentSeason) break;
+    const resetCategories = resetCategoriesForNewSeason(currentCategories);
+    const carried = carryForwardRecurringTransactions(currentTransactions, resetCategories, next);
+    currentCategories = carried.categories;
+    currentTransactions = carried.transactions.length > 0 ? carried.transactions : currentTransactions;
     currentSeason = next;
     iterations += 1;
   }
@@ -119,6 +135,7 @@ export function catchUpSeason(
     activeSeason: nowLabel,
     categories: currentCategories,
     harvestHistory: [...newHarvests.reverse(), ...harvestHistory],
+    transactions: currentTransactions,
     rolledOver: true,
   };
 }

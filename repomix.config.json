@@ -7,7 +7,14 @@
       "public",
       "repomix-output.*",
       "package-lock.json",
-      "MDFILES"
+      "MDFILES",
+      "**/tsconfig.tsbuildinfo",
+      "**/public/**",
+      "**/*.png",
+      "**/*.jpg",
+      "**/*.jpeg",
+      "**/*.svg",
+      "**/*.ico"
     ]
   },
 

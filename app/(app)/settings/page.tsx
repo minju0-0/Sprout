@@ -7,6 +7,7 @@ import { useBudgetStore, selectGardenState } from "@/store/budgetStore";
 import { getCurrentSeasonLabel } from "@/lib/seasonLogic";
 import { SyncStatusIndicator } from "@/components/SyncStatusIndicator";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { markAccountDataDeleted } from "@/hooks/useGardenSync";
 export default function SettingsPage() {
   const loadGardenState = useBudgetStore((state) => state.loadGardenState);
   const syncStatus = useBudgetStore((state) => state.syncStatus);
@@ -37,6 +38,13 @@ export default function SettingsPage() {
           errorBody?.error ?? "Couldn't delete your saved garden data right now.",
         );
       }
+      // FIX (bug 2): the Supabase row is gone as of the line above. Before
+      // touching local store state, tell useGardenSync's autosave to stand
+      // down — otherwise the loadGardenState() call below (which is itself a
+      // watched store change) gets picked up by the debounced-save
+      // subscription and silently PUTs this empty state right back to
+      // Supabase a moment later, recreating the row we just deleted.
+      markAccountDataDeleted();
       await useBudgetStore.persist.clearStorage();
       loadGardenState({
         categories: [],

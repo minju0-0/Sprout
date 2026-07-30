@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { X } from "lucide-react";
 import type { BudgetCategory, PlantSpecies } from "@/types";
 import { plantTypeMap } from "@/constants/gardenAssets";
+import { PlantThumbnail } from "@/components/PlantThumbnail";
 export type CategoryModalState =
   | { mode: "add" }
   | { mode: "edit"; category: BudgetCategory };
@@ -11,13 +12,11 @@ interface CategoryModalProps {
   onClose: () => void;
   onSubmit: (values: Omit<BudgetCategory, "id" | "spent">) => void;
 }
-const speciesOptions = Object.entries(plantTypeMap) as [PlantSpecies, (typeof plantTypeMap)[PlantSpecies]][];
+const speciesOptions = Object.keys(plantTypeMap) as PlantSpecies[];
 export function CategoryModal({ state, onClose, onSubmit }: CategoryModalProps) {
   const editing = state.mode === "edit" ? state.category : null;
   const [name, setName] = useState(editing?.name ?? "");
-  const [budgetLimit, setBudgetLimit] = useState(
-    editing ? String(editing.budgetLimit) : "",
-  );
+  const [budgetLimit, setBudgetLimit] = useState(editing ? String(editing.budgetLimit) : "");
   const [species, setSpecies] = useState<PlantSpecies>(editing?.species ?? "tomato");
   const [error, setError] = useState<string | null>(null);
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -42,39 +41,39 @@ export function CategoryModal({ state, onClose, onSubmit }: CategoryModalProps) 
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-3xl bg-card p-6 shadow-lg"
+        className="w-full max-w-sm rounded-2xl bg-card p-6 shadow-lg"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-5 flex items-start justify-between">
           <h2 id="category-modal-title" className="font-display text-lg text-ink">
-            {editing ? "Edit category" : "Plant a new category"}
+            {editing ? "Edit category" : "Add Budget Category"}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-full p-1 text-ink-soft transition-colors hover:bg-moss/10 hover:text-ink active:bg-moss/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-moss"
+            className="rounded-full p-1 text-ink-soft transition-colors hover:bg-moss/10 hover:text-ink"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
-            <label htmlFor="category-name" className="text-xs text-ink-soft">
-              Name
+            <label htmlFor="category-name" className="text-xs font-semibold tracking-wide text-ink-soft uppercase">
+              Category name
             </label>
             <input
               id="category-name"
               type="text"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Groceries"
+              placeholder="e.g. Groceries"
               className="rounded-lg border border-moss/20 bg-canvas px-3 py-2 text-sm text-ink"
               autoFocus
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label htmlFor="category-budget" className="text-xs text-ink-soft">
+            <label htmlFor="category-budget" className="text-xs font-semibold tracking-wide text-ink-soft uppercase">
               Monthly budget
             </label>
             <input
@@ -84,38 +83,34 @@ export function CategoryModal({ state, onClose, onSubmit }: CategoryModalProps) 
               step="0.01"
               value={budgetLimit}
               onChange={(event) => setBudgetLimit(event.target.value)}
-              placeholder="500"
+              placeholder="$0.00"
               className="rounded-lg border border-moss/20 bg-canvas px-3 py-2 font-data text-sm text-ink"
             />
           </div>
-          <div className="flex flex-col gap-1">
-            <span id="category-species-label" className="text-xs text-ink-soft">
-              Plant
+          <div className="flex flex-col gap-2">
+            <span id="category-species-label" className="text-xs font-semibold tracking-wide text-ink-soft uppercase">
+              Choose a plant species
             </span>
             <div
               role="group"
               aria-labelledby="category-species-label"
               className="grid grid-cols-5 gap-2"
             >
-              {speciesOptions.map(([value, visual]) => (
+              {speciesOptions.map((value) => (
                 <button
                   key={value}
                   type="button"
                   onClick={() => setSpecies(value)}
                   aria-pressed={species === value}
-                  title={visual.label}
-                  className={`flex flex-col items-center gap-1 rounded-lg border px-1 py-2 text-center text-[10px] leading-tight text-ink-soft transition-colors ${
+                  title={plantTypeMap[value].label}
+                  className={`flex flex-col items-center gap-1 rounded-xl border-2 px-1 py-2 text-center text-[10px] leading-tight transition-colors ${
                     species === value
-                      ? "border-moss bg-moss/10 text-ink"
-                      : "border-moss/20 bg-canvas hover:border-moss/40 active:bg-moss/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-moss"
+                      ? "border-moss bg-moss/5 text-ink"
+                      : "border-moss/15 bg-canvas text-ink-soft hover:border-moss/30"
                   }`}
                 >
-                  <span
-                    aria-hidden="true"
-                    className="h-3 w-3 rounded-full border border-ink/10"
-                    style={{ backgroundColor: visual.stages.thriving.accent }}
-                  />
-                  {visual.label}
+                  <PlantThumbnail species={value} size={44} />
+                  {plantTypeMap[value].label}
                 </button>
               ))}
             </div>
@@ -125,15 +120,15 @@ export function CategoryModal({ state, onClose, onSubmit }: CategoryModalProps) 
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg px-3 py-1.5 text-sm font-semibold text-ink-soft transition-colors hover:bg-moss/10 active:bg-moss/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-moss"
+              className="rounded-lg border border-moss/20 px-3 py-1.5 text-sm font-semibold text-ink-soft transition-colors hover:bg-moss/10"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-moss px-4 py-1.5 text-sm font-semibold text-canvas transition-colors hover:bg-moss-light active:bg-moss-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-moss"
+              className="rounded-lg bg-moss px-4 py-1.5 text-sm font-semibold text-canvas transition-colors hover:bg-moss-light"
             >
-              {editing ? "Save" : "Plant it"}
+              {editing ? "Save" : "Save category"}
             </button>
           </div>
         </form>
