@@ -60,8 +60,14 @@ describe("normalizeAmount", () => {
   it("strips currency symbols and commas", () => {
     expect(normalizeAmount("$1,234.56")).toBe(1234.56);
   });
-  it("treats parenthesized values as their absolute value", () => {
-    expect(normalizeAmount("(45.00)")).toBe(45);
+  it("preserves a negative sign instead of discarding it", () => {
+    expect(normalizeAmount("-45.00")).toBe(-45);
+  });
+  it("treats parenthesized values as negative (a refund/credit), not just their absolute value", () => {
+    expect(normalizeAmount("(45.00)")).toBe(-45);
+  });
+  it("treats a leading + as an explicit positive", () => {
+    expect(normalizeAmount("+45.00")).toBe(45);
   });
   it("returns null for zero or unparseable values", () => {
     expect(normalizeAmount("0")).toBeNull();
@@ -91,6 +97,14 @@ describe("buildImportRows", () => {
       categories,
     );
     expect(row.categoryId).toBeNull();
+  });
+  it("keeps a refund's amount negative rather than importing it as a positive spend", () => {
+    const [row] = buildImportRows(
+      [["2026-01-05", "Refund", "(20.00)", "Groceries"]],
+      mapping,
+      categories,
+    );
+    expect(row.amount).toBe(-20);
   });
 });
 describe("toImportableTransactions", () => {
@@ -124,5 +138,14 @@ describe("toImportableTransactions", () => {
       categories,
     );
     expect(toImportableTransactions(rows, null)).toHaveLength(0);
+  });
+  it("preserves a negative (refund) amount through to the importable transaction", () => {
+    const rows = buildImportRows(
+      [["2026-01-05", "Refund", "(20.00)", "Groceries"]],
+      mapping,
+      categories,
+    );
+    const transactions = toImportableTransactions(rows, null);
+    expect(transactions[0].amount).toBe(-20);
   });
 });

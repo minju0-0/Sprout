@@ -16,7 +16,14 @@ const speciesOptions = Object.keys(plantTypeMap) as PlantSpecies[];
 export function CategoryModal({ state, onClose, onSubmit }: CategoryModalProps) {
   const editing = state.mode === "edit" ? state.category : null;
   const [name, setName] = useState(editing?.name ?? "");
-  const [budgetLimit, setBudgetLimit] = useState(editing ? String(editing.budgetLimit) : "");
+  // Bug #9 fix: pre-fill from the baseline (pre-envelope-fill) budget, not
+  // the effective `budgetLimit`, which may be temporarily inflated/deflated
+  // by mid-season "Move money" transfers. Without this, re-saving an edited
+  // category with no real change would silently bake a temporary fill in
+  // as the new permanent baseline.
+  const [budgetLimit, setBudgetLimit] = useState(
+    editing ? String(editing.baseBudgetLimit ?? editing.budgetLimit) : "",
+  );
   const [species, setSpecies] = useState<PlantSpecies>(editing?.species ?? "tomato");
   const [error, setError] = useState<string | null>(null);
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -86,6 +93,12 @@ export function CategoryModal({ state, onClose, onSubmit }: CategoryModalProps) 
               placeholder="$0.00"
               className="rounded-lg border border-moss/20 bg-canvas px-3 py-2 font-data text-sm text-ink"
             />
+            {editing && editing.baseBudgetLimit !== undefined && editing.baseBudgetLimit !== editing.budgetLimit && (
+              <p className="text-xs text-ink-soft">
+                Currently shows your baseline budget, not this season&apos;s envelope-adjusted
+                amount — saving resets any mid-season fills/transfers on this category.
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-2">
             <span id="category-species-label" className="text-xs font-semibold tracking-wide text-ink-soft uppercase">

@@ -23,7 +23,6 @@ import { CsvImportModal } from "@/components/CsvImportModal";
 import { ActionToast } from "@/components/ActionToast";
 import { StatCard } from "@/components/StatCard";
 import { TableSkeleton, StatCardSkeletonRow } from "@/components/Skeleton";
-import { cn } from "@/lib/cn";
 type SortField = "date" | "category" | "description" | "amount";
 type SortDir = "asc" | "desc";
 const ALL_CATEGORIES = "all" as const;
@@ -76,16 +75,8 @@ export default function TransactionsPage() {
   function categoryOf(id: string) {
     return categories.find((c) => c.id === id);
   }
-  // FIX (bug 3): every logged Transaction represents spending — real income
-  // always goes through "Add income" straight into `unallocated` (Phase
-  // 11.2's envelope model) and never becomes a Transaction. Guessing
-  // "income" from a category name containing the word "income" was never
-  // true in practice, which made Inflow render as permanently $0, Net
-  // collapse to just -Outflow, and the "Income" filter pill match nothing.
-  // Removed that heuristic and the Income/Expenses split entirely — the
-  // stats below now describe only what the data actually represents.
-  const totalSpent = transactions.reduce((sum, t) => sum + t.amount, 0);
-  const averageTransaction = transactions.length > 0 ? totalSpent / transactions.length : 0;
+  const hasActiveFilters =
+    search.trim() !== "" || categoryFilter !== ALL_CATEGORIES || dateFrom !== "" || dateTo !== "";
   const filteredAndSorted = useMemo(() => {
     const term = search.trim().toLowerCase();
     const filtered = transactions.filter((transaction) => {
@@ -106,6 +97,12 @@ export default function TransactionsPage() {
       }
     });
   }, [transactions, search, categoryFilter, dateFrom, dateTo, sortField, sortDir]);
+  // CHANGED: derived from filteredAndSorted instead of the raw transactions
+  // array, so the stat row actually matches what's showing in the table
+  // below it once a search/category/date filter is active.
+  const totalSpent = filteredAndSorted.reduce((sum, t) => sum + t.amount, 0);
+  const averageTransaction =
+    filteredAndSorted.length > 0 ? totalSpent / filteredAndSorted.length : 0;
   function toggleSort(field: SortField) {
     if (field === sortField) {
       setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
@@ -114,16 +111,11 @@ export default function TransactionsPage() {
       setSortDir(field === "date" ? "desc" : "asc");
     }
   }
-  const hasActiveFilters =
-    search.trim() !== "" || categoryFilter !== ALL_CATEGORIES || dateFrom !== "" || dateTo !== "";
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-6 py-10 sm:px-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h1 className="font-display text-3xl text-ink">Transactions</h1>
-          {/* FIX (bug 3): this used to always show transactions.length (the
-              unfiltered total) regardless of active search/category/date
-              filters. Now reflects what's actually in view below. */}
           <p className="text-sm text-ink-soft">
             {filteredAndSorted.length} transaction{filteredAndSorted.length === 1 ? "" : "s"} in view
             {hasActiveFilters && ` of ${transactions.length} total`}
@@ -164,9 +156,24 @@ export default function TransactionsPage() {
             </p>
           )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <StatCard label="Transactions" value={String(transactions.length)} tone="default" />
-            <StatCard label="Total spent" value={formatCurrency(totalSpent, currencyCode)} tone="danger" />
-            <StatCard label="Average" value={formatCurrency(averageTransaction, currencyCode)} tone="default" />
+            <StatCard
+              label="Transactions"
+              value={String(filteredAndSorted.length)}
+              subtitle={hasActiveFilters ? "matching filters" : undefined}
+              tone="default"
+            />
+            <StatCard
+              label="Total spent"
+              value={formatCurrency(totalSpent, currencyCode)}
+              subtitle={hasActiveFilters ? "matching filters" : undefined}
+              tone="danger"
+            />
+            <StatCard
+              label="Average"
+              value={formatCurrency(averageTransaction, currencyCode)}
+              subtitle={hasActiveFilters ? "matching filters" : undefined}
+              tone="default"
+            />
           </div>
           <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-moss/10 bg-card px-4 py-3 shadow-sm">
             <div className="relative min-w-[220px] flex-1">
@@ -228,6 +235,7 @@ export default function TransactionsPage() {
                 <tbody>
                   {filteredAndSorted.map((transaction) => {
                     const category = categoryOf(transaction.categoryId);
+                    const isCredit = transaction.amount < 0;
                     return (
                       <tr key={transaction.id} className="group border-b border-moss/10 last:border-b-0 hover:bg-moss/5">
                         <td className="px-5 py-3 font-data text-ink-soft">{formatDate(transaction.date)}</td>
@@ -245,8 +253,9 @@ export default function TransactionsPage() {
                         <td className="px-3 py-3">
                           {category ? <CategoryChip name={category.name} species={category.species} /> : <span className="text-ink-soft">Unknown</span>}
                         </td>
-                        <td className="px-3 py-3 text-right font-data text-ink">
-                          -{formatCurrency(transaction.amount, currencyCode)}
+                        <td className={`px-3 py-3 text-right font-data ${isCredit ? "text-moss" : "text-ink"}`}>
+                          {isCredit ? "+" : "-"}
+                          {formatCurrency(Math.abs(transaction.amount), currencyCode)}
                         </td>
                         <td className="px-5 py-3 text-right">
                           <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">

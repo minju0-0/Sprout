@@ -99,6 +99,15 @@ export function normalizeDate(raw: string): string | null {
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed.toISOString().slice(0, 10);
 }
+/**
+ * Parses a raw amount cell into a signed number. Bug fix: this used to
+ * detect a leading "-" or parenthesized value (a refund/credit convention
+ * common in bank exports) and then discard that sign entirely, importing
+ * every row — refunds included — as a positive expense. Sign is now
+ * preserved: a parenthesized or "-"-prefixed value returns negative, so a
+ * refund reduces the category's spend instead of inflating it like an
+ * ordinary purchase.
+ */
 export function normalizeAmount(raw: string): number | null {
   let trimmed = raw.trim();
   if (!trimmed) return null;
@@ -109,13 +118,15 @@ export function normalizeAmount(raw: string): number | null {
   }
   if (trimmed.startsWith("-")) {
     negative = true;
+    trimmed = trimmed.slice(1);
+  } else if (trimmed.startsWith("+")) {
+    trimmed = trimmed.slice(1);
   }
   const cleaned = trimmed.replace(/[^0-9.]/g, "");
   if (!cleaned) return null;
   const value = Number(cleaned);
   if (!Number.isFinite(value) || value === 0) return null;
-  void negative;
-  return Math.abs(value);
+  return negative ? -value : value;
 }
 function matchCategory(name: string, categories: BudgetCategory[]): BudgetCategory | null {
   const term = name.trim().toLowerCase();

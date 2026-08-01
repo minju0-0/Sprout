@@ -8,6 +8,7 @@ interface ConfirmDialogProps {
   isConfirming?: boolean;
   onConfirm: () => void;
   onClose: () => void;
+  children?: React.ReactNode;
 }
 export function ConfirmDialog({
   title,
@@ -18,6 +19,7 @@ export function ConfirmDialog({
   isConfirming = false,
   onConfirm,
   onClose,
+  children,
 }: ConfirmDialogProps) {
   return (
     <div
@@ -35,6 +37,7 @@ export function ConfirmDialog({
         <p id="confirm-dialog-description" className="mt-2 text-sm text-ink-soft">
           {description}
         </p>
+        {children && <div className="mt-4">{children}</div>}
         <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"

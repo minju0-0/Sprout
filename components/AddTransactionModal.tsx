@@ -1,4 +1,3 @@
-// components/AddTransactionModal.tsx
 "use client";
 import { useState, type FormEvent } from "react";
 import { X } from "lucide-react";
@@ -14,6 +13,7 @@ export function AddTransactionModal({ categories, onClose, onSubmit }: AddTransa
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(() => getLocalDateString());
   const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
+  const [isCredit, setIsCredit] = useState(false);
   const [error, setError] = useState<string | null>(null);
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -33,7 +33,7 @@ export function AddTransactionModal({ categories, onClose, onSubmit }: AddTransa
     onSubmit({
       categoryId,
       description: merchant.trim(),
-      amount: parsed,
+      amount: isCredit ? -parsed : parsed,
       date,
       isRecurring: false,
     });
@@ -124,6 +124,19 @@ export function AddTransactionModal({ categories, onClose, onSubmit }: AddTransa
               ))}
             </select>
           </div>
+          <label
+            htmlFor="txn-credit"
+            className="flex items-center gap-1.5 text-xs text-ink-soft"
+          >
+            <input
+              id="txn-credit"
+              type="checkbox"
+              checked={isCredit}
+              onChange={(event) => setIsCredit(event.target.checked)}
+              className="h-3.5 w-3.5 accent-moss"
+            />
+            This is a refund / credit — adds money back to the category
+          </label>
           {error && <p className="text-xs text-rust">{error}</p>}
           <div className="mt-1 flex justify-end gap-2">
             <button

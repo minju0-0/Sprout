@@ -1,23 +1,20 @@
 "use client";
-
 import { useState, type FormEvent } from "react";
 import { X } from "lucide-react";
 import type { Debt } from "@/types";
-
+import { formatCurrency } from "@/lib/currency";
 export type DebtModalState = { mode: "add" } | { mode: "edit"; debt: Debt };
-
 interface DebtModalProps {
   state: DebtModalState;
+  currencyCode: string | null;
   onClose: () => void;
   onSubmit: (values: Omit<Debt, "id" | "currentAmount">) => void;
 }
-
-export function DebtModal({ state, onClose, onSubmit }: DebtModalProps) {
+export function DebtModal({ state, currencyCode, onClose, onSubmit }: DebtModalProps) {
   const editing = state.mode === "edit" ? state.debt : null;
   const [name, setName] = useState(editing?.name ?? "");
   const [startingAmount, setStartingAmount] = useState(editing ? String(editing.startingAmount) : "");
   const [error, setError] = useState<string | null>(null);
-
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const parsedAmount = Number(startingAmount);
@@ -31,13 +28,15 @@ export function DebtModal({ state, onClose, onSubmit }: DebtModalProps) {
     }
     if (editing && parsedAmount < editing.currentAmount) {
       setError(
-        `Starting amount can't be less than the ${editing.currentAmount} already remaining. Log a payment instead if the balance actually dropped.`,
+        `Starting amount can't be less than the ${formatCurrency(
+          editing.currentAmount,
+          currencyCode,
+        )} already remaining. Log a payment instead if the balance actually dropped.`,
       );
       return;
     }
     onSubmit({ name: name.trim(), startingAmount: parsedAmount });
   }
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4"
