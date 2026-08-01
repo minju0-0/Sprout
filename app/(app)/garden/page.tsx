@@ -1,10 +1,10 @@
 "use client";
-
 import { useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { Wallet, Coins, PiggyBank, Target, Plus } from "lucide-react";
 import { useBudgetStore } from "@/store/budgetStore";
 import { getGardenHealth, getPercentSpent } from "@/lib/gardenLogic";
+import { isDateInSeason } from "@/lib/seasonLogic";
 import { captureEvent } from "@/lib/analytics";
 import { formatCurrency } from "@/lib/currency";
 import { sortByDateDesc } from "@/lib/transactions";
@@ -20,21 +20,18 @@ import { OnboardingModal } from "@/components/OnboardingModal";
 import { Walkthrough } from "@/components/Walkthrough";
 import { ActionToast } from "@/components/ActionToast";
 import { StatCardSkeletonRow, TableSkeleton, CardSkeleton } from "@/components/Skeleton";
-
 const ACTION_TOAST_DURATION_MS = 1600;
 const RECENT_TRANSACTIONS_LIMIT = 6;
-
 export default function GardenPage() {
-  // Move store selections & state inside the functional component body
   const addTransaction = useBudgetStore((state) => state.addTransaction);
   const [showAddTransaction, setShowAddTransaction] = useState(false);
-
   const hasHydrated = useBudgetStore((state) => state.hasHydrated);
   const categories = useBudgetStore((state) => state.categories);
   const transactions = useBudgetStore((state) => state.transactions);
   const goals = useBudgetStore((state) => state.goals);
   const currencyCode = useBudgetStore((state) => state.currencyCode);
   const activeSeason = useBudgetStore((state) => state.activeSeason);
+  const unallocated = useBudgetStore((state) => state.unallocated);
   const setCurrencyCode = useBudgetStore((state) => state.setCurrencyCode);
   const advisorNotes = useBudgetStore((state) => state.advisorNotes);
   const isAdvisorLoading = useBudgetStore((state) => state.isAdvisorLoading);
@@ -52,11 +49,18 @@ export default function GardenPage() {
   const completeWalkthrough = useBudgetStore((state) => state.completeWalkthrough);
   const gardenHealth = getGardenHealth(categories);
   const { user, isLoaded } = useUser();
-
   const [categoryModal, setCategoryModal] = useState<CategoryModalState | null>(null);
   const [actionToast, setActionToast] = useState<string | null>(null);
-
-  const recentTransactions = sortByDateDesc(transactions).slice(0, RECENT_TRANSACTIONS_LIMIT);
+  // Only this season's transactions belong on the "at a glance" dashboard —
+  // a previous season's activity is already frozen into its own harvest
+  // record and lives on /reports, not here.
+  const currentSeasonTransactions = transactions.filter((transaction) =>
+    isDateInSeason(transaction.date, activeSeason),
+  );
+  const recentTransactions = sortByDateDesc(currentSeasonTransactions).slice(
+    0,
+    RECENT_TRANSACTIONS_LIMIT,
+  );
   const totalBudgeted = categories.reduce((sum, c) => sum + c.budgetLimit, 0);
   const totalSpent = categories.reduce((sum, c) => sum + c.spent, 0);
   const remaining = totalBudgeted - totalSpent;
@@ -69,15 +73,13 @@ export default function GardenPage() {
   const remainingTone: StatCardTone = remaining < 0 ? "danger" : "positive";
   const activeGoalCount = goals.length;
   const totalGoalSaved = goals.reduce((sum, g) => sum + g.currentAmount, 0);
-
   function flashActionToast(message: string) {
     setActionToast(message);
     window.setTimeout(() => setActionToast(null), ACTION_TOAST_DURATION_MS);
   }
-
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-6 py-10 sm:px-8">
-      {/* Header */}
+      {}
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h1 className="font-display text-3xl text-ink">
@@ -96,7 +98,6 @@ export default function GardenPage() {
           Add transaction
         </button>
       </header>
-
       {!hasHydrated ? (
         <>
           <CardSkeleton bodyHeight="h-16" />
@@ -109,14 +110,13 @@ export default function GardenPage() {
         </>
       ) : (
         <>
-          {/* Weather Status Banner */}
+          {}
           <WeatherBanner
             status={gardenHealth}
             percentSpent={categories.length > 0 ? overallPercentSpent : undefined}
             onAddCategory={() => setCategoryModal({ mode: "add" })}
           />
-
-          {/* Top Metric Cards */}
+          {}
           {categories.length > 0 && (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4" aria-label="Season at a glance">
               <StatCard
@@ -147,8 +147,7 @@ export default function GardenPage() {
               />
             </div>
           )}
-
-          {/* Garden Plot & Recent Transactions */}
+          {}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:items-start">
             <GardenBedPanel
               categories={categories}
@@ -161,14 +160,12 @@ export default function GardenPage() {
               transactions={recentTransactions}
               categories={categories}
               currencyCode={currencyCode}
-              totalCount={transactions.length}
+              totalCount={currentSeasonTransactions.length}
             />
           </div>
-
-          {/* Budget at a Glance */}
+          {}
           <BudgetAtAGlance categories={categories} currencyCode={currencyCode} />
-
-          {/* AI Advisor Panel */}
+          {}
           <GardenAdvisor
             notes={advisorNotes}
             isLoading={isAdvisorLoading}
@@ -186,11 +183,11 @@ export default function GardenPage() {
           />
         </>
       )}
-
-      {/* Modals & Overlays */}
+      {}
       {showAddTransaction && (
         <AddTransactionModal
           categories={categories}
+          activeSeason={activeSeason}
           onClose={() => setShowAddTransaction(false)}
           onSubmit={(values) => {
             addTransaction(values);
@@ -211,12 +208,14 @@ export default function GardenPage() {
       {categoryModal && (
         <CategoryModal
           state={categoryModal}
+          unallocated={unallocated}
+          currencyCode={currencyCode}
           onClose={() => setCategoryModal(null)}
-          onSubmit={(values) => {
+          onSubmit={(values, fundFromUnallocated) => {
             if (categoryModal.mode === "edit") {
-              updateCategory(categoryModal.category.id, values);
+              updateCategory(categoryModal.category.id, values, fundFromUnallocated);
             } else {
-              addCategory(values);
+              addCategory(values, fundFromUnallocated);
               captureEvent("category_added");
               flashActionToast("Category added");
             }
@@ -228,7 +227,6 @@ export default function GardenPage() {
     </main>
   );
 }
-
 function timeOfDayGreeting(): string {
   const hour = new Date().getHours();
   if (hour < 12) return "morning";

@@ -1,20 +1,28 @@
 "use client";
 import { useState, type FormEvent } from "react";
-import { X } from "lucide-react";
+import { AlertTriangle, X } from "lucide-react";
 import type { BudgetCategory, Transaction } from "@/types";
 import { getLocalDateString } from "@/lib/transactions";
+import { isDateInSeason } from "@/lib/seasonLogic";
 export interface AddTransactionModalProps {
   categories: BudgetCategory[];
+  activeSeason: string;
   onClose: () => void;
   onSubmit: (values: Omit<Transaction, "id">) => void;
 }
-export function AddTransactionModal({ categories, onClose, onSubmit }: AddTransactionModalProps) {
-  const [merchant, setMerchant] = useState("");
+export function AddTransactionModal({
+  categories,
+  activeSeason,
+  onClose,
+  onSubmit,
+}: AddTransactionModalProps) {
+  const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(() => getLocalDateString());
   const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
   const [isCredit, setIsCredit] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dateOutsideSeason = Boolean(date) && !isDateInSeason(date, activeSeason);
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const parsed = Number(amount);
@@ -22,8 +30,8 @@ export function AddTransactionModal({ categories, onClose, onSubmit }: AddTransa
       setError("Choose a category.");
       return;
     }
-    if (!merchant.trim()) {
-      setError("Give the transaction a merchant/description.");
+    if (!description.trim()) {
+      setError("Give the transaction a description.");
       return;
     }
     if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -32,7 +40,7 @@ export function AddTransactionModal({ categories, onClose, onSubmit }: AddTransa
     }
     onSubmit({
       categoryId,
-      description: merchant.trim(),
+      description: description.trim(),
       amount: isCredit ? -parsed : parsed,
       date,
       isRecurring: false,
@@ -65,15 +73,15 @@ export function AddTransactionModal({ categories, onClose, onSubmit }: AddTransa
         </div>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
-            <label htmlFor="txn-merchant" className="text-xs font-semibold tracking-wide text-ink-soft uppercase">
-              Merchant
+            <label htmlFor="txn-description" className="text-xs font-semibold tracking-wide text-ink-soft uppercase">
+              Description
             </label>
             <input
-              id="txn-merchant"
+              id="txn-description"
               type="text"
-              value={merchant}
-              onChange={(event) => setMerchant(event.target.value)}
-              placeholder="e.g. Whole Foods Market"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="e.g. Groceries at Whole Foods"
               className="rounded-lg border border-moss/20 bg-canvas px-3 py-2 text-sm text-ink"
               autoFocus
             />
@@ -107,6 +115,13 @@ export function AddTransactionModal({ categories, onClose, onSubmit }: AddTransa
               />
             </div>
           </div>
+          {dateOutsideSeason && (
+            <p className="flex items-start gap-1.5 rounded-lg bg-marigold/10 px-3 py-2 text-xs text-marigold-700">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              This date falls outside {activeSeason} — it&apos;ll be logged, but won&apos;t count
+              toward this season&apos;s budget until that month is harvested.
+            </p>
+          )}
           <div className="flex flex-col gap-1">
             <label htmlFor="txn-category" className="text-xs font-semibold tracking-wide text-ink-soft uppercase">
               Category

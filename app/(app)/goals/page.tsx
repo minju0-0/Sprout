@@ -16,6 +16,7 @@ export default function GoalsPage() {
   const goals = useBudgetStore((state) => state.goals);
   const debts = useBudgetStore((state) => state.debts);
   const currencyCode = useBudgetStore((state) => state.currencyCode);
+  const unallocated = useBudgetStore((state) => state.unallocated);
   const addContribution = useBudgetStore((state) => state.addContribution);
   const addGoal = useBudgetStore((state) => state.addGoal);
   const updateGoal = useBudgetStore((state) => state.updateGoal);
@@ -26,15 +27,21 @@ export default function GoalsPage() {
   const addDebtPayment = useBudgetStore((state) => state.addDebtPayment);
   const [goalModal, setGoalModal] = useState<GoalModalState | null>(null);
   const [debtModal, setDebtModal] = useState<DebtModalState | null>(null);
-  const [historyModal, setHistoryModal] = useState<
-    { type: "goal"; goal: Goal } | { type: "debt"; debt: Debt } | null
-  >(null);
+const [historyModal, setHistoryModal] = useState<
+  { type: "goal"; goal: Goal } | { type: "debt"; debt: Debt } | null
+>(null);
   const [confirmDeleteGoal, setConfirmDeleteGoal] = useState<Goal | null>(null);
   const [confirmDeleteDebt, setConfirmDeleteDebt] = useState<Debt | null>(null);
   const [goalAmounts, setGoalAmounts] = useState<Record<string, string>>({});
   const [debtAmounts, setDebtAmounts] = useState<Record<string, string>>({});
   const [goalErrors, setGoalErrors] = useState<Record<string, string>>({});
   const [debtErrors, setDebtErrors] = useState<Record<string, string>>({});
+  // Bug fix (unallocated sourcing): per-goal/per-debt "did the person opt to
+  // actually pull this contribution/payment from the shared unallocated
+  // pool" flag. Defaults false everywhere, matching the exact old behavior
+  // (a contribution is just a tracking number) until someone opts in.
+  const [goalFundFlags, setGoalFundFlags] = useState<Record<string, boolean>>({});
+  const [debtFundFlags, setDebtFundFlags] = useState<Record<string, boolean>>({});
   const activeGoalsCount = goals.filter((g) => g.currentAmount < g.targetAmount).length;
   const activeDebtsCount = debts.filter((d) => d.currentAmount > 0).length;
   function clearGoalError(goalId: string) {
@@ -63,8 +70,16 @@ export default function GoalsPage() {
       setGoalErrors((prev) => ({ ...prev, [goalId]: "Enter an amount greater than 0." }));
       return;
     }
+    const fund = goalFundFlags[goalId] ?? false;
+    if (fund && val > unallocated) {
+      setGoalErrors((prev) => ({
+        ...prev,
+        [goalId]: `Only ${formatCurrency(unallocated, currencyCode)} available in Unallocated.`,
+      }));
+      return;
+    }
     clearGoalError(goalId);
-    addContribution(goalId, val);
+    addContribution(goalId, val, fund);
     setGoalAmounts((prev) => ({ ...prev, [goalId]: "" }));
   };
   const handleDebtSubmit = (e: React.FormEvent, debtId: string) => {
@@ -75,8 +90,24 @@ export default function GoalsPage() {
       setDebtErrors((prev) => ({ ...prev, [debtId]: "Enter an amount greater than 0." }));
       return;
     }
+    const fund = debtFundFlags[debtId] ?? false;
+    if (fund) {
+      const debt = debts.find((d) => d.id === debtId);
+      // Bug fix: validate against what will actually be deducted (the
+      // amount capped to what's still owed), not the raw entered figure —
+      // otherwise a slightly-over payment gets wrongly rejected even when
+      // the real cost is well within what's available.
+      const applied = debt ? Math.min(val, debt.currentAmount) : val;
+      if (applied > unallocated) {
+        setDebtErrors((prev) => ({
+          ...prev,
+          [debtId]: `Only ${formatCurrency(unallocated, currencyCode)} available in Unallocated.`,
+        }));
+        return;
+      }
+    }
     clearDebtError(debtId);
-    addDebtPayment(debtId, val);
+    addDebtPayment(debtId, val, fund);
     setDebtAmounts((prev) => ({ ...prev, [debtId]: "" }));
   };
   return (
@@ -225,7 +256,7 @@ export default function GoalsPage() {
                                 onSubmit={(e) => handleGoalSubmit(e, goal.id)}
                                 onClick={(e) => e.stopPropagation()}
                                 onKeyDown={(e) => e.stopPropagation()}
-                                className="flex flex-col gap-1"
+                                className="flex flex-col gap-1.5"
                               >
                                 <div className="flex gap-1.5">
                                   <input
@@ -248,6 +279,21 @@ export default function GoalsPage() {
                                     Add
                                   </button>
                                 </div>
+                                <label className="flex items-center gap-1.5 text-[10px] text-ink-soft">
+                                  <input
+                                    type="checkbox"
+                                    checked={goalFundFlags[goal.id] ?? false}
+                                    onChange={(e) =>
+                                      setGoalFundFlags((prev) => ({
+                                        ...prev,
+                                        [goal.id]: e.target.checked,
+                                      }))
+                                    }
+                                    disabled={unallocated <= 0}
+                                    className="h-3 w-3 accent-moss"
+                                  />
+                                  Fund from Unallocated ({formatCurrency(unallocated, currencyCode)} avail.)
+                                </label>
                                 {goalErrors[goal.id] && (
                                   <p className="text-[11px] text-rust">{goalErrors[goal.id]}</p>
                                 )}
@@ -373,7 +419,7 @@ export default function GoalsPage() {
                                 onSubmit={(e) => handleDebtSubmit(e, debt.id)}
                                 onClick={(e) => e.stopPropagation()}
                                 onKeyDown={(e) => e.stopPropagation()}
-                                className="flex flex-col gap-1"
+                                className="flex flex-col gap-1.5"
                               >
                                 <div className="flex gap-1.5">
                                   <input
@@ -396,6 +442,21 @@ export default function GoalsPage() {
                                     Pay
                                   </button>
                                 </div>
+                                <label className="flex items-center gap-1.5 text-[10px] text-ink-soft">
+                                  <input
+                                    type="checkbox"
+                                    checked={debtFundFlags[debt.id] ?? false}
+                                    onChange={(e) =>
+                                      setDebtFundFlags((prev) => ({
+                                        ...prev,
+                                        [debt.id]: e.target.checked,
+                                      }))
+                                    }
+                                    disabled={unallocated <= 0}
+                                    className="h-3 w-3 accent-moss"
+                                  />
+                                  Fund from Unallocated ({formatCurrency(unallocated, currencyCode)} avail.)
+                                </label>
                                 {debtErrors[debt.id] && (
                                   <p className="text-[11px] text-rust">{debtErrors[debt.id]}</p>
                                 )}

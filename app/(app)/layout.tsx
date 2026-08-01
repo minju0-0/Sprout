@@ -8,6 +8,7 @@ import { useSignOutRedirect } from "@/hooks/useSignOutRedirect";
 import { AppNav } from "@/components/AppNav";
 import { PageTransition } from "@/components/PageTransition";
 import { CurrencyProfilePage } from "@/components/CurrencyProfilePage";
+import { SeasonRolloverNotice } from "@/components/SeasonRolloverNotice";
 import { cn } from "@/lib/cn";
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -53,6 +54,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <PageTransition>{children}</PageTransition>
         </main>
       </div>
+      {/* Rendered at the shared-shell level, not inside garden/page.tsx,
+          so it can appear no matter which page the rollover is detected
+          on (useGardenSync's checkSeasonRollover() call lives here too). */}
+      <SeasonRolloverNotice />
     </div>
   );
 }

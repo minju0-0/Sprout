@@ -16,21 +16,6 @@ function markSaved(setSyncStatus: (status: "saved", error?: null) => void) {
     useBudgetStore.getState().setSyncStatus("idle");
   }, SAVED_DISPLAY_MS);
 }
-// FIX (bug 2): Settings' "Delete account data" flow deletes the Supabase row
-// and then calls loadGardenState() with an empty garden so the local copy
-// doesn't re-upload stale data. But loadGardenState() is itself a store
-// change, and the autosave subscription below only checks
-// `hasLoadedThisSession` — it doesn't know an intentional server-side delete
-// just happened — so it would debounce-save that (now-empty) state right
-// back to Supabase a moment later, silently recreating the row.
-//
-// Calling this right after the DELETE request (before loadGardenState)
-// clears `hasLoadedThisSession` and cancels any in-flight debounced save, so
-// the autosave subscription's guard (`if (!hasLoadedThisSession) return;`)
-// short-circuits and nothing gets re-uploaded. The initial-load effect will
-// naturally set `hasLoadedThisSession` back to true (and re-arm autosave)
-// the next time this hook mounts for a signed-in session — e.g. after the
-// user signs back in, or on their next visit to /garden or /settings.
 export function markAccountDataDeleted() {
   hasLoadedThisSession = false;
   if (pendingSaveTimeout) {
@@ -52,6 +37,27 @@ async function saveGardenState(state: GardenState): Promise<void> {
   });
   if (!response.ok) throw new Error("Failed to save garden state");
 }
+/** Best-effort flush of any pending debounced save. BUG FIX: without this,
+ * a delete or edit made inside the SYNC_DEBOUNCE_MS window, immediately
+ * followed by closing the tab, switching apps, or navigating away, was
+ * silently lost — it looked "done" on screen and in localStorage, but the
+ * PUT that would have written it to Supabase never got a chance to fire.
+ * `keepalive: true` lets the request continue after the page starts
+ * unloading (works for small payloads, which this is). */
+function flushPendingSave() {
+  if (!pendingSaveTimeout) return;
+  clearTimeout(pendingSaveTimeout);
+  pendingSaveTimeout = null;
+  const state = selectGardenState(useBudgetStore.getState());
+  fetch("/api/garden", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(state),
+    keepalive: true,
+  }).catch(() => {
+    // Best-effort only — nothing more we can do once the page is unloading.
+  });
+}
 export function useGardenSync() {
   const { isLoaded, isSignedIn } = useAuth();
   const hasHydrated = useBudgetStore((state) => state.hasHydrated);
@@ -61,6 +67,21 @@ export function useGardenSync() {
   useEffect(() => {
     if (!isSignedIn) hasLoadedThisSession = false;
   }, [isSignedIn]);
+  // BUG FIX: this rollover check used to only run after the async Supabase
+  // fetch below resolved. But the dashboard is already fully interactive as
+  // soon as `hasHydrated` flips true (that's just local storage, no
+  // network wait) — so there was a real window where `activeSeason` could
+  // still be last month's label while the "Add transaction" button was
+  // already clickable. Any transaction logged in that window compared its
+  // date against the stale season, silently failed the "is this in the
+  // current season" check in the store, and never got applied to that
+  // category's `spent` — even though it showed up fine in the ledger.
+  // Running the rollover check immediately here, independent of the
+  // network round-trip, closes that window.
+  useEffect(() => {
+    if (!hasHydrated) return;
+    checkSeasonRollover();
+  }, [hasHydrated, checkSeasonRollover]);
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !hasHydrated || hasLoadedThisSession) return;
     hasLoadedThisSession = true;
@@ -82,6 +103,9 @@ export function useGardenSync() {
           "Couldn't reach the garden's saved data — working from your local copy.",
         );
       } finally {
+        // Runs again here in case the state that just loaded (server copy,
+        // or the local fallback saved above) was itself even more stale
+        // than what the hydration-time check above already caught.
         checkSeasonRollover();
       }
     })();
@@ -103,6 +127,7 @@ export function useGardenSync() {
       if (!changed) return;
       if (pendingSaveTimeout) clearTimeout(pendingSaveTimeout);
       pendingSaveTimeout = setTimeout(() => {
+        pendingSaveTimeout = null;
         setSyncStatus("saving");
         saveGardenState(selectGardenState(useBudgetStore.getState()))
           .then(() => markSaved(setSyncStatus))
@@ -119,4 +144,20 @@ export function useGardenSync() {
       unsubscribe();
     };
   }, [isSignedIn, setSyncStatus]);
+  // BUG FIX: flush any pending debounced save when the tab is closed,
+  // refreshed, or backgrounded. `beforeunload` covers closing/navigating;
+  // `visibilitychange` also covers switching apps on mobile, where
+  // `beforeunload` doesn't reliably fire at all.
+  useEffect(() => {
+    if (!isSignedIn) return;
+    function handleVisibilityChange() {
+      if (document.visibilityState === "hidden") flushPendingSave();
+    }
+    window.addEventListener("beforeunload", flushPendingSave);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("beforeunload", flushPendingSave);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isSignedIn]);
 }
