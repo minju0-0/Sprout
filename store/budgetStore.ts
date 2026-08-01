@@ -24,6 +24,8 @@ import {
   createHarvestRecord,
   getCurrentSeasonLabel,
   getNextSeasonLabel,
+  getSeasonEndUnallocatedRefund,
+  isDateInSeason,
   resetCategoriesForNewSeason,
 } from "@/lib/seasonLogic";
 const noopStorage: StateStorage = {
@@ -63,9 +65,16 @@ interface BudgetStore {
   addDebt: (debt: Omit<Debt, "id" | "currentAmount">) => void;
   updateDebt: (id: string, updates: Omit<Debt, "id" | "currentAmount">) => void;
   addDebtPayment: (debtId: string, amount: number) => void;
-  addCategory: (category: Omit<BudgetCategory, "id" | "spent">) => void;
-  updateCategory: (id: string, updates: Omit<BudgetCategory, "id" | "spent">) => void;
-  deleteCategory: (id: string) => void;
+  addCategory: (category: Omit<BudgetCategory, "id" | "spent" | "baseBudgetLimit">) => void;
+  updateCategory: (
+    id: string,
+    updates: Omit<BudgetCategory, "id" | "spent" | "baseBudgetLimit">,
+  ) => void;
+  // CHANGED: deleteCategory now takes an explicit refundToUnallocated flag
+  // instead of always sweeping the remaining budgetLimit - spent balance
+  // into unallocated. Defaults to true so every existing call site that
+  // doesn't pass it keeps today's behavior.
+  deleteCategory: (id: string, refundToUnallocated?: boolean) => void;
   addIncome: (amount: number, note?: string) => void;
   moveMoney: (from: MoneyPocket, to: MoneyPocket, amount: number) => void;
   setCurrencyCode: (currencyCode: string) => void;
@@ -110,13 +119,16 @@ export const useBudgetStore = create<BudgetStore>()(
             ...transaction,
             id: crypto.randomUUID(),
           };
+          const inSeason = isDateInSeason(transaction.date, state.activeSeason);
           return {
             transactions: [newTransaction, ...state.transactions],
-            categories: state.categories.map((category) =>
-              category.id === transaction.categoryId
-                ? { ...category, spent: category.spent + transaction.amount }
-                : category,
-            ),
+            categories: inSeason
+              ? state.categories.map((category) =>
+                  category.id === transaction.categoryId
+                    ? { ...category, spent: category.spent + transaction.amount }
+                    : category,
+                )
+              : state.categories,
           };
         }),
       importTransactions: (transactions) =>
@@ -128,6 +140,7 @@ export const useBudgetStore = create<BudgetStore>()(
           }));
           const spentByCategory = new Map<string, number>();
           for (const transaction of transactions) {
+            if (!isDateInSeason(transaction.date, state.activeSeason)) continue;
             spentByCategory.set(
               transaction.categoryId,
               (spentByCategory.get(transaction.categoryId) ?? 0) + transaction.amount,
@@ -146,13 +159,15 @@ export const useBudgetStore = create<BudgetStore>()(
           const existing = state.transactions.find((transaction) => transaction.id === id);
           if (!existing) return state;
           const updated: Transaction = { ...updates, id };
+          const existingInSeason = isDateInSeason(existing.date, state.activeSeason);
+          const updatedInSeason = isDateInSeason(updates.date, state.activeSeason);
           return {
             transactions: state.transactions.map((transaction) =>
               transaction.id === id ? updated : transaction,
             ),
             categories: state.categories.map((category) => {
-              const wasSource = category.id === existing.categoryId;
-              const isDestination = category.id === updates.categoryId;
+              const wasSource = category.id === existing.categoryId && existingInSeason;
+              const isDestination = category.id === updates.categoryId && updatedInSeason;
               if (wasSource && isDestination) {
                 return { ...category, spent: category.spent - existing.amount + updates.amount };
               }
@@ -170,13 +185,16 @@ export const useBudgetStore = create<BudgetStore>()(
         set((state) => {
           const existing = state.transactions.find((transaction) => transaction.id === id);
           if (!existing) return state;
+          const inSeason = isDateInSeason(existing.date, state.activeSeason);
           return {
             transactions: state.transactions.filter((transaction) => transaction.id !== id),
-            categories: state.categories.map((category) =>
-              category.id === existing.categoryId
-                ? { ...category, spent: category.spent - existing.amount }
-                : category,
-            ),
+            categories: inSeason
+              ? state.categories.map((category) =>
+                  category.id === existing.categoryId
+                    ? { ...category, spent: category.spent - existing.amount }
+                    : category,
+                )
+              : state.categories,
           };
         }),
       deleteGoal: (id) =>
@@ -226,42 +244,55 @@ export const useBudgetStore = create<BudgetStore>()(
         })),
       addDebtPayment: (debtId, amount) =>
         set((state) => ({
-          debts: state.debts.map((debt) =>
-            debt.id === debtId
-              ? {
-                  ...debt,
-                  currentAmount: Math.max(0, debt.currentAmount - amount),
-                  history: [
-                    ...(debt.history ?? []),
-                    { id: crypto.randomUUID(), amount, date: getLocalDateString() },
-                  ],
-                }
-              : debt,
-          ),
+          debts: state.debts.map((debt) => {
+            if (debt.id !== debtId) return debt;
+            const applied = Math.min(amount, debt.currentAmount);
+            return {
+              ...debt,
+              currentAmount: Math.max(0, debt.currentAmount - amount),
+              history: [
+                ...(debt.history ?? []),
+                { id: crypto.randomUUID(), amount: applied, date: getLocalDateString() },
+              ],
+            };
+          }),
         })),
       addCategory: (category) =>
         set((state) => ({
           categories: [
             ...state.categories,
-            { ...category, id: crypto.randomUUID(), spent: 0 },
+            {
+              ...category,
+              id: crypto.randomUUID(),
+              spent: 0,
+              baseBudgetLimit: category.budgetLimit,
+            },
           ],
         })),
       updateCategory: (id, updates) =>
         set((state) => ({
           categories: state.categories.map((category) =>
-            category.id === id ? { ...category, ...updates } : category,
+            category.id === id
+              ? {
+                  ...category,
+                  ...updates,
+                  baseBudgetLimit: updates.budgetLimit,
+                }
+              : category,
           ),
         })),
-      // FIX (bug 1): deleting a category used to discard its unspent envelope
-      // balance entirely. Since "Add income" / "Move money" (Phase 11.2) moves
-      // real money into a category's budgetLimit, that money must go back to
-      // `unallocated` on delete — never vanish. Only the *unspent* portion
-      // (budgetLimit - spent, floored at 0) is refunded; money already spent
-      // is gone regardless.
-      deleteCategory: (id) =>
+      // CHANGED: refundToUnallocated defaults to true (old behavior).
+      // When false, the category's remaining budgetLimit - spent balance
+      // is simply discarded rather than credited back to unallocated —
+      // for the case where that money was never really "real" funded
+      // money to begin with.
+      deleteCategory: (id, refundToUnallocated = true) =>
         set((state) => {
           const category = state.categories.find((c) => c.id === id);
-          const refund = category ? Math.max(category.budgetLimit - category.spent, 0) : 0;
+          const refund =
+            refundToUnallocated && category
+              ? Math.max(category.budgetLimit - category.spent, 0)
+              : 0;
           return {
             categories: state.categories.filter((category) => category.id !== id),
             transactions: state.transactions.filter((transaction) => transaction.categoryId !== id),
@@ -295,10 +326,12 @@ export const useBudgetStore = create<BudgetStore>()(
       startNewSeason: () =>
         set((state) => {
           const nextSeason = getNextSeasonLabel(state.activeSeason);
+          const unallocatedRefund = getSeasonEndUnallocatedRefund(state.categories);
           const resetCategories = resetCategoriesForNewSeason(state.categories);
           const carried = carryForwardRecurringTransactions(
             state.transactions,
             resetCategories,
+            state.activeSeason,
             nextSeason,
           );
           return {
@@ -307,8 +340,9 @@ export const useBudgetStore = create<BudgetStore>()(
               ...state.harvestHistory,
             ],
             categories: carried.categories,
-            transactions: carried.transactions,
+            transactions: [...carried.transactions, ...state.transactions],
             activeSeason: nextSeason,
+            unallocated: state.unallocated + unallocatedRefund,
           };
         }),
       checkSeasonRollover: () => {
@@ -325,6 +359,7 @@ export const useBudgetStore = create<BudgetStore>()(
           categories: result.categories,
           harvestHistory: result.harvestHistory,
           transactions: result.transactions,
+          unallocated: state.unallocated + result.unallocatedRefund,
         });
       },
       fetchAdvisorNotes: async () => {

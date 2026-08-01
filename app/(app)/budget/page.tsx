@@ -1,5 +1,4 @@
 "use client";
-
 import { useState } from "react";
 import { Plus, Pencil, Trash2, ArrowRightLeft, PiggyBank, Wallet } from "lucide-react";
 import { useBudgetStore } from "@/store/budgetStore";
@@ -14,7 +13,6 @@ import { StatusPill } from "@/components/StatusPill";
 import { EnvelopeFillModal, type EnvelopeModalState } from "@/components/EnvelopeFillModal";
 import { AllocationHistoryList } from "@/components/AllocationHistoryList";
 import { StatCard } from "@/components/StatCard";
-
 export default function BudgetPage() {
   const hasHydrated = useBudgetStore((state) => state.hasHydrated);
   const categories = useBudgetStore((state) => state.categories);
@@ -28,24 +26,31 @@ export default function BudgetPage() {
   const allocationHistory = useBudgetStore((state) => state.allocationHistory);
   const addIncome = useBudgetStore((state) => state.addIncome);
   const moveMoney = useBudgetStore((state) => state.moveMoney);
-
   const [categoryModal, setCategoryModal] = useState<CategoryModalState | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  // NEW: whether the leftover budget on the category being deleted should
+  // be credited back to Unallocated. Defaults to true (today's behavior),
+  // reset to true every time a new delete confirmation is opened.
+  const [refundOnDelete, setRefundOnDelete] = useState(true);
   const [envelopeModal, setEnvelopeModal] = useState<EnvelopeModalState | null>(null);
-
   function transactionCountFor(categoryId: string) {
     return transactions.filter((t) => t.categoryId === categoryId).length;
+  }
+  function openDeleteConfirm(categoryId: string) {
+    setConfirmDeleteId(categoryId);
+    setRefundOnDelete(true);
   }
   const confirmDeleteCategory = confirmDeleteId
     ? (categories.find((c) => c.id === confirmDeleteId) ?? null)
     : null;
   const confirmDeleteTxCount = confirmDeleteId ? transactionCountFor(confirmDeleteId) : 0;
-
+  const confirmDeleteRemaining = confirmDeleteCategory
+    ? Math.max(confirmDeleteCategory.budgetLimit - confirmDeleteCategory.spent, 0)
+    : 0;
   const totalBudgeted = categories.reduce((sum, c) => sum + c.budgetLimit, 0);
   const totalSpent = categories.reduce((sum, c) => sum + c.spent, 0);
   const overallPercent = totalBudgeted > 0 ? totalSpent / totalBudgeted : 0;
   const remaining = totalBudgeted - totalSpent;
-
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-6 py-10 sm:px-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -83,7 +88,6 @@ export default function BudgetPage() {
           </button>
         </div>
       </header>
-
       {!hasHydrated ? (
         <>
           <CardSkeleton bodyHeight="h-20" />
@@ -111,7 +115,6 @@ export default function BudgetPage() {
               icon={Wallet}
             />
           </div>
-
           {categories.length > 0 && (
             <section className="rounded-2xl border border-moss/10 bg-card px-6 py-5 shadow-sm">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -132,9 +135,7 @@ export default function BudgetPage() {
               </div>
             </section>
           )}
-
           <UpcomingBills transactions={transactions} categories={categories} currencyCode={currencyCode} />
-
           {categories.length === 0 ? (
             <p className="rounded-2xl border border-moss/10 bg-card px-5 py-6 text-center text-sm text-ink-soft shadow-sm">
               No categories planted yet.
@@ -193,7 +194,7 @@ export default function BudgetPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setConfirmDeleteId(category.id)}
+                          onClick={() => openDeleteConfirm(category.id)}
                           aria-label={`Delete category: ${category.name}`}
                           className="rounded-full p-1 text-ink-soft transition-colors hover:bg-rust/10 hover:text-rust"
                         >
@@ -209,7 +210,6 @@ export default function BudgetPage() {
           <AllocationHistoryList events={allocationHistory} categories={categories} currencyCode={currencyCode} />
         </>
       )}
-
       {categoryModal && (
         <CategoryModal
           state={categoryModal}
@@ -243,9 +243,32 @@ export default function BudgetPage() {
               ? `Deleting ${confirmDeleteCategory.name} also removes ${confirmDeleteTxCount} transaction${confirmDeleteTxCount === 1 ? "" : "s"} logged against it. This can't be undone.`
               : `This removes ${confirmDeleteCategory.name} from your garden. This can't be undone.`
           }
-          onConfirm={() => { deleteCategory(confirmDeleteCategory.id); setConfirmDeleteId(null); }}
+          onConfirm={() => {
+            deleteCategory(confirmDeleteCategory.id, refundOnDelete);
+            setConfirmDeleteId(null);
+          }}
           onClose={() => setConfirmDeleteId(null)}
-        />
+        >
+          {confirmDeleteRemaining > 0 && (
+            <label className="flex items-start gap-2.5 rounded-xl border border-moss/15 bg-canvas px-3 py-2.5 text-sm text-ink-soft">
+              <input
+                type="checkbox"
+                checked={refundOnDelete}
+                onChange={(event) => setRefundOnDelete(event.target.checked)}
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-moss"
+              />
+              <span>
+                Add the{" "}
+                <strong className="text-ink">
+                  {formatCurrency(confirmDeleteRemaining, currencyCode)}
+                </strong>{" "}
+                remaining in this category back to Unallocated, so it&apos;s ready to move into
+                another envelope. Uncheck this if that budget was never real funded money to
+                begin with.
+              </span>
+            </label>
+          )}
+        </ConfirmDialog>
       )}
     </main>
   );

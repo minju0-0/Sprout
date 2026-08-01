@@ -308,12 +308,37 @@ body {
   0%, 100% { transform: rotate(-3deg); }
   50% { transform: rotate(3deg); }
 }
+/* ...unchanged rules above... */
 .weed-sway { animation: sway 2.4s ease-in-out infinite; transform-origin: bottom center; }
 @media (prefers-reduced-motion: reduce) {
   .weed-sway { animation: none; }
 }
-
-/* ── Scrollbars: hidden by default, faint on hover ────────────────────── */
+.feature-card {
+  background: var(--color-card-raised);
+  border: 1px solid rgba(38, 42, 31, 0.08);
+  border-radius: 16px;
+  padding: 24px;
+  transition: box-shadow 180ms ease, transform 180ms ease;
+}
+.feature-card:hover {
+  box-shadow: 0 4px 14px rgba(38, 42, 31, 0.11), 0 2px 5px rgba(38, 42, 31, 0.06);
+  transform: translateY(-2px);
+}
+@keyframes sparkle {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+.animate-sparkle circle {
+  animation: sparkle 1.6s ease-in-out infinite;
+  transform-origin: center;
+}
+.animate-sparkle circle:nth-child(2) { animation-delay: 0.2s; }
+.animate-sparkle circle:nth-child(3) { animation-delay: 0.4s; }
+.animate-sparkle circle:nth-child(4) { animation-delay: 0.6s; }
+.animate-sparkle circle:nth-child(5) { animation-delay: 0.8s; }
+@media (prefers-reduced-motion: reduce) {
+  .animate-sparkle circle { animation: none; opacity: 0.85; }
+}
 .scrollable { scrollbar-width: none; }
 .scrollable::-webkit-scrollbar { width: 0; height: 0; }
 .scrollable:hover { scrollbar-width: thin; scrollbar-color: var(--color-canvas-dark) transparent; }

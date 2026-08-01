@@ -33,6 +33,11 @@ export function RecentTransactionsList({
       <ul className="border-t border-moss/10 px-2 py-2">
         {transactions.map((transaction) => {
           const category = categories.find((c) => c.id === transaction.categoryId);
+          // Bug fix: formatCurrency already renders a negative amount with
+          // its own "-" (e.g. an imported refund). Prepending a literal
+          // "-" unconditionally produced "--$20" for refunds instead of
+          // "+$20". Sign is now derived from the amount itself.
+          const isCredit = transaction.amount < 0;
           return (
             <li
               key={transaction.id}
@@ -53,8 +58,11 @@ export function RecentTransactionsList({
                   {category && <CategoryChip name={category.name} species={category.species} />}
                 </span>
               </div>
-              <span className="shrink-0 font-data text-sm text-ink">
-                -{formatCurrency(transaction.amount, currencyCode)}
+              <span
+                className={`shrink-0 font-data text-sm ${isCredit ? "text-moss" : "text-ink"}`}
+              >
+                {isCredit ? "+" : "-"}
+                {formatCurrency(Math.abs(transaction.amount), currencyCode)}
               </span>
             </li>
           );

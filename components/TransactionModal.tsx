@@ -13,7 +13,8 @@ export function TransactionModal({ state, categories, onClose, onSubmit }: Trans
   const { transaction } = state;
   const [categoryId, setCategoryId] = useState(transaction.categoryId);
   const [description, setDescription] = useState(transaction.description);
-  const [amount, setAmount] = useState(String(transaction.amount));
+  const [amount, setAmount] = useState(String(Math.abs(transaction.amount)));
+  const [isCredit, setIsCredit] = useState(transaction.amount < 0);
   const [date, setDate] = useState(transaction.date);
   const [isRecurring, setIsRecurring] = useState(Boolean(transaction.isRecurring));
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +40,7 @@ export function TransactionModal({ state, categories, onClose, onSubmit }: Trans
     onSubmit(transaction.id, {
       categoryId,
       description: description.trim(),
-      amount: parsedAmount,
+      amount: isCredit ? -parsedAmount : parsedAmount,
       date,
       isRecurring,
     });
@@ -130,6 +131,19 @@ export function TransactionModal({ state, categories, onClose, onSubmit }: Trans
               />
             </div>
           </div>
+          <label
+            htmlFor="transaction-credit"
+            className="flex items-center gap-1.5 text-xs text-ink-soft"
+          >
+            <input
+              id="transaction-credit"
+              type="checkbox"
+              checked={isCredit}
+              onChange={(event) => setIsCredit(event.target.checked)}
+              className="h-3.5 w-3.5 accent-moss"
+            />
+            This is a refund / credit — adds money back to the category
+          </label>
           <label
             htmlFor="transaction-recurring"
             className="flex items-center gap-1.5 text-xs text-ink-soft"
