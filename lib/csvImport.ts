@@ -95,19 +95,22 @@ export function normalizeDate(raw: string): string | null {
     const candidate = `${year}-${month}-${day}`;
     return Number.isNaN(Date.parse(candidate)) ? null : candidate;
   }
+  // BUG FIX: this used to do `new Date(trimmed).toISOString().slice(0, 10)`.
+  // `new Date(trimmed)` parses non-ISO formats (e.g. "January 5, 2026") in
+  // the browser's LOCAL timezone, but `.toISOString()` converts back out in
+  // UTC — for anyone east of UTC, that can silently roll the date back a
+  // full day (or forward, west of UTC), which then fails the "is this in
+  // the current season" check elsewhere and the transaction never counts
+  // toward that category's spending. Reading the date back out with local
+  // getters (matching `getLocalDateString` elsewhere in the app) avoids the
+  // UTC round-trip entirely.
   const parsed = new Date(trimmed);
   if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toISOString().slice(0, 10);
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
-/**
- * Parses a raw amount cell into a signed number. Bug fix: this used to
- * detect a leading "-" or parenthesized value (a refund/credit convention
- * common in bank exports) and then discard that sign entirely, importing
- * every row — refunds included — as a positive expense. Sign is now
- * preserved: a parenthesized or "-"-prefixed value returns negative, so a
- * refund reduces the category's spend instead of inflating it like an
- * ordinary purchase.
- */
 export function normalizeAmount(raw: string): number | null {
   let trimmed = raw.trim();
   if (!trimmed) return null;

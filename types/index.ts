@@ -14,16 +14,6 @@ export interface BudgetCategory {
   id: string;
   name: string;
   budgetLimit: number;
-  /**
-   * The category's official monthly budget target, as last set via the
-   * category form. `budgetLimit` is the *effective* envelope amount and can
-   * be temporarily inflated during a season by "Move money"/"Add income"
-   * fills; `baseBudgetLimit` is what `budgetLimit` resets back to at the
-   * next season rollover, so one-time envelope fills don't silently become
-   * permanent budget increases. Optional for backward compatibility with
-   * categories persisted before this field existed — falls back to
-   * `budgetLimit` wherever it's read.
-   */
   baseBudgetLimit?: number;
   spent: number;
   species: PlantSpecies;
@@ -77,6 +67,14 @@ export interface AllocationEvent {
   to: MoneyPocket | null;
   note?: string;
   date: string;
+}
+// NEW: transient notice shown once when checkSeasonRollover() actually
+// advances the season (whether by one month or several skipped ones) so
+// the user finds out their garden was harvested automatically, instead of
+// just quietly landing on a reset garden with no explanation.
+export interface SeasonRolloverNotice {
+  harvestedSeasons: string[];
+  newSeason: string;
 }
 export interface GardenState {
   categories: BudgetCategory[];

@@ -33,19 +33,13 @@ export function RecentTransactionsList({
       <ul className="border-t border-moss/10 px-2 py-2">
         {transactions.map((transaction) => {
           const category = categories.find((c) => c.id === transaction.categoryId);
-          // Bug fix: formatCurrency already renders a negative amount with
-          // its own "-" (e.g. an imported refund). Prepending a literal
-          // "-" unconditionally produced "--$20" for refunds instead of
-          // "+$20". Sign is now derived from the amount itself.
           const isCredit = transaction.amount < 0;
           return (
             <li
               key={transaction.id}
               className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm hover:bg-moss/5"
             >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-moss/10 text-xs font-semibold text-moss-700">
-                {transaction.description.trim().charAt(0).toUpperCase() || "?"}
-              </span>
+              {}
               <div className="flex min-w-0 flex-1 flex-col">
                 <span className="inline-flex items-center gap-1.5 truncate text-ink">
                   {transaction.description}
@@ -68,7 +62,9 @@ export function RecentTransactionsList({
           );
         })}
         {transactions.length === 0 && (
-          <p className="px-3 py-6 text-center text-sm text-ink-soft">No transactions yet.</p>
+          <p className="px-3 py-6 text-center text-sm text-ink-soft">
+            No transactions logged this season yet.
+          </p>
         )}
       </ul>
       {totalCount > transactions.length && (

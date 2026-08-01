@@ -4,28 +4,29 @@ import { X } from "lucide-react";
 import type { BudgetCategory, PlantSpecies } from "@/types";
 import { plantTypeMap } from "@/constants/gardenAssets";
 import { PlantThumbnail } from "@/components/PlantThumbnail";
+import { formatCurrency } from "@/lib/currency";
+import { cn } from "@/lib/cn";
 export type CategoryModalState =
   | { mode: "add" }
   | { mode: "edit"; category: BudgetCategory };
 interface CategoryModalProps {
   state: CategoryModalState;
+  unallocated: number;
+  currencyCode: string | null;
   onClose: () => void;
-  onSubmit: (values: Omit<BudgetCategory, "id" | "spent">) => void;
+  onSubmit: (values: Omit<BudgetCategory, "id" | "spent">, fundFromUnallocated: boolean) => void;
 }
 const speciesOptions = Object.keys(plantTypeMap) as PlantSpecies[];
-export function CategoryModal({ state, onClose, onSubmit }: CategoryModalProps) {
+export function CategoryModal({ state, unallocated, currencyCode, onClose, onSubmit }: CategoryModalProps) {
   const editing = state.mode === "edit" ? state.category : null;
   const [name, setName] = useState(editing?.name ?? "");
-  // Bug #9 fix: pre-fill from the baseline (pre-envelope-fill) budget, not
-  // the effective `budgetLimit`, which may be temporarily inflated/deflated
-  // by mid-season "Move money" transfers. Without this, re-saving an edited
-  // category with no real change would silently bake a temporary fill in
-  // as the new permanent baseline.
-  const [budgetLimit, setBudgetLimit] = useState(
-    editing ? String(editing.baseBudgetLimit ?? editing.budgetLimit) : "",
-  );
+  const previousLimit = editing?.baseBudgetLimit ?? editing?.budgetLimit ?? 0;
+  const [budgetLimit, setBudgetLimit] = useState(editing ? String(previousLimit) : "");
   const [species, setSpecies] = useState<PlantSpecies>(editing?.species ?? "tomato");
+  const [fundFromUnallocated, setFundFromUnallocated] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const parsedPreview = Number(budgetLimit);
+  const delta = editing && Number.isFinite(parsedPreview) ? parsedPreview - previousLimit : 0;
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const parsedLimit = Number(budgetLimit);
@@ -37,7 +38,18 @@ export function CategoryModal({ state, onClose, onSubmit }: CategoryModalProps) 
       setError("Budget must be a number greater than 0.");
       return;
     }
-    onSubmit({ name: name.trim(), budgetLimit: parsedLimit, species });
+    if (!editing && fundFromUnallocated && parsedLimit > unallocated) {
+      setError(`Only ${formatCurrency(unallocated, currencyCode)} available in Unallocated.`);
+      return;
+    }
+    if (editing && fundFromUnallocated) {
+      const editDelta = parsedLimit - previousLimit;
+      if (editDelta > 0 && editDelta > unallocated) {
+        setError(`Only ${formatCurrency(unallocated, currencyCode)} available in Unallocated.`);
+        return;
+      }
+    }
+    onSubmit({ name: name.trim(), budgetLimit: parsedLimit, species }, fundFromUnallocated);
   }
   return (
     <div
@@ -100,6 +112,52 @@ export function CategoryModal({ state, onClose, onSubmit }: CategoryModalProps) 
               </p>
             )}
           </div>
+          {!editing && (
+            <label
+              htmlFor="category-fund-unallocated"
+              className={cn(
+                "flex items-start gap-2 rounded-xl border border-moss/15 bg-canvas px-3 py-2.5 text-xs text-ink-soft",
+                unallocated <= 0 && "opacity-50",
+              )}
+            >
+              <input
+                id="category-fund-unallocated"
+                type="checkbox"
+                checked={fundFromUnallocated}
+                onChange={(event) => setFundFromUnallocated(event.target.checked)}
+                disabled={unallocated <= 0}
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-moss"
+              />
+              <span>
+                Fund from Unallocated ({formatCurrency(unallocated, currencyCode)} available) —
+                deducts this budget from your unallocated pool instead of just setting a target.
+                Leave unchecked to plant a category without moving any real money yet.
+              </span>
+            </label>
+          )}
+          {editing && delta !== 0 && Number.isFinite(parsedPreview) && parsedPreview > 0 && (
+            <label
+              htmlFor="category-fund-delta"
+              className={cn(
+                "flex items-start gap-2 rounded-xl border border-moss/15 bg-canvas px-3 py-2.5 text-xs text-ink-soft",
+                delta > 0 && unallocated <= 0 && "opacity-50",
+              )}
+            >
+              <input
+                id="category-fund-delta"
+                type="checkbox"
+                checked={fundFromUnallocated}
+                onChange={(event) => setFundFromUnallocated(event.target.checked)}
+                disabled={delta > 0 && unallocated <= 0}
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-moss"
+              />
+              <span>
+                {delta > 0
+                  ? `Fund the extra ${formatCurrency(delta, currencyCode)} from Unallocated (${formatCurrency(unallocated, currencyCode)} available) — otherwise this just raises the target with no money moving.`
+                  : `Return the freed-up ${formatCurrency(Math.abs(delta), currencyCode)} to Unallocated — otherwise it simply disappears from the budget.`}
+              </span>
+            </label>
+          )}
           <div className="flex flex-col gap-2">
             <span id="category-species-label" className="text-xs font-semibold tracking-wide text-ink-soft uppercase">
               Choose a plant species

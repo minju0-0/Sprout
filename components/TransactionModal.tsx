@@ -1,15 +1,23 @@
 "use client";
 import { useState, type FormEvent } from "react";
-import { X } from "lucide-react";
+import { AlertTriangle, X } from "lucide-react";
 import type { BudgetCategory, Transaction } from "@/types";
+import { isDateInSeason } from "@/lib/seasonLogic";
 export type TransactionModalState = { transaction: Transaction };
 interface TransactionModalProps {
   state: TransactionModalState;
   categories: BudgetCategory[];
+  activeSeason: string;
   onClose: () => void;
   onSubmit: (id: string, updates: Omit<Transaction, "id">) => void;
 }
-export function TransactionModal({ state, categories, onClose, onSubmit }: TransactionModalProps) {
+export function TransactionModal({
+  state,
+  categories,
+  activeSeason,
+  onClose,
+  onSubmit,
+}: TransactionModalProps) {
   const { transaction } = state;
   const [categoryId, setCategoryId] = useState(transaction.categoryId);
   const [description, setDescription] = useState(transaction.description);
@@ -18,6 +26,7 @@ export function TransactionModal({ state, categories, onClose, onSubmit }: Trans
   const [date, setDate] = useState(transaction.date);
   const [isRecurring, setIsRecurring] = useState(Boolean(transaction.isRecurring));
   const [error, setError] = useState<string | null>(null);
+  const dateOutsideSeason = Boolean(date) && !isDateInSeason(date, activeSeason);
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const parsedAmount = Number(amount);
@@ -131,6 +140,13 @@ export function TransactionModal({ state, categories, onClose, onSubmit }: Trans
               />
             </div>
           </div>
+          {dateOutsideSeason && (
+            <p className="flex items-start gap-1.5 rounded-lg bg-marigold/10 px-3 py-2 text-xs text-marigold-700">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              This date falls outside {activeSeason} — it&apos;ll stay logged, but won&apos;t count
+              toward this season&apos;s budget until that month is harvested.
+            </p>
+          )}
           <label
             htmlFor="transaction-credit"
             className="flex items-center gap-1.5 text-xs text-ink-soft"

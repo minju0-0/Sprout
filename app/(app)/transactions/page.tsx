@@ -50,6 +50,7 @@ export default function TransactionsPage() {
   const categories = useBudgetStore((state) => state.categories);
   const transactions = useBudgetStore((state) => state.transactions);
   const currencyCode = useBudgetStore((state) => state.currencyCode);
+  const activeSeason = useBudgetStore((state) => state.activeSeason);
   const addTransaction = useBudgetStore((state) => state.addTransaction);
   const importTransactions = useBudgetStore((state) => state.importTransactions);
   const updateTransaction = useBudgetStore((state) => state.updateTransaction);
@@ -97,9 +98,6 @@ export default function TransactionsPage() {
       }
     });
   }, [transactions, search, categoryFilter, dateFrom, dateTo, sortField, sortDir]);
-  // CHANGED: derived from filteredAndSorted instead of the raw transactions
-  // array, so the stat row actually matches what's showing in the table
-  // below it once a search/category/date filter is active.
   const totalSpent = filteredAndSorted.reduce((sum, t) => sum + t.amount, 0);
   const averageTransaction =
     filteredAndSorted.length > 0 ? totalSpent / filteredAndSorted.length : 0;
@@ -222,11 +220,19 @@ export default function TransactionsPage() {
           </section>
           <section className="rounded-2xl border border-moss/10 bg-card shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-left text-sm">
+              {}
+              <table className="w-full min-w-[680px] table-fixed text-left text-sm">
+                <colgroup>
+                  <col className="w-[100px]" />
+                  <col className="w-auto" />
+                  <col className="w-[160px]" />
+                  <col className="w-[130px]" />
+                  <col className="w-[84px]" />
+                </colgroup>
                 <thead className="sticky top-0 z-10 bg-card">
                   <tr>
                     <th className="border-b border-moss/10 px-5 py-3"><SortHeader field="date" label="Date" activeField={sortField} dir={sortDir} onToggle={toggleSort} /></th>
-                    <th className="border-b border-moss/10 px-3 py-3"><SortHeader field="description" label="Merchant" activeField={sortField} dir={sortDir} onToggle={toggleSort} /></th>
+                    <th className="border-b border-moss/10 px-3 py-3"><SortHeader field="description" label="Description" activeField={sortField} dir={sortDir} onToggle={toggleSort} /></th>
                     <th className="border-b border-moss/10 px-3 py-3"><SortHeader field="category" label="Category" activeField={sortField} dir={sortDir} onToggle={toggleSort} /></th>
                     <th className="border-b border-moss/10 px-3 py-3 text-right"><SortHeader field="amount" label="Amount" activeField={sortField} dir={sortDir} onToggle={toggleSort} align="right" /></th>
                     <th className="border-b border-moss/10 px-5 py-3 text-right"><span className="sr-only">Actions</span></th>
@@ -238,22 +244,19 @@ export default function TransactionsPage() {
                     const isCredit = transaction.amount < 0;
                     return (
                       <tr key={transaction.id} className="group border-b border-moss/10 last:border-b-0 hover:bg-moss/5">
-                        <td className="px-5 py-3 font-data text-ink-soft">{formatDate(transaction.date)}</td>
+                        <td className="truncate px-5 py-3 font-data text-ink-soft">{formatDate(transaction.date)}</td>
                         <td className="px-3 py-3">
-                          <span className="inline-flex items-center gap-2 text-ink">
-                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-moss/10 text-[10px] font-semibold text-moss-700">
-                              {transaction.description.trim().charAt(0).toUpperCase() || "?"}
-                            </span>
-                            {transaction.description}
+                          <span className="inline-flex min-w-0 items-center gap-1.5 truncate text-ink">
+                            <span className="truncate">{transaction.description}</span>
                             {transaction.isRecurring && (
                               <Repeat className="h-3 w-3 shrink-0 text-moss" role="img" aria-label="Repeats monthly" />
                             )}
                           </span>
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="truncate px-3 py-3">
                           {category ? <CategoryChip name={category.name} species={category.species} /> : <span className="text-ink-soft">Unknown</span>}
                         </td>
-                        <td className={`px-3 py-3 text-right font-data ${isCredit ? "text-moss" : "text-ink"}`}>
+                        <td className={`truncate px-3 py-3 text-right font-data ${isCredit ? "text-moss" : "text-ink"}`}>
                           {isCredit ? "+" : "-"}
                           {formatCurrency(Math.abs(transaction.amount), currencyCode)}
                         </td>
@@ -294,6 +297,7 @@ export default function TransactionsPage() {
       {showAddModal && (
         <AddTransactionModal
           categories={categories}
+          activeSeason={activeSeason}
           onClose={() => setShowAddModal(false)}
           onSubmit={(values) => {
             addTransaction(values);
@@ -306,6 +310,7 @@ export default function TransactionsPage() {
         <TransactionModal
           state={transactionModal}
           categories={categories}
+          activeSeason={activeSeason}
           onClose={() => setTransactionModal(null)}
           onSubmit={(id, values) => { updateTransaction(id, values); setTransactionModal(null); }}
         />
@@ -322,6 +327,7 @@ export default function TransactionsPage() {
         <CsvImportModal
           categories={categories}
           currencyCode={currencyCode}
+          activeSeason={activeSeason}
           onClose={() => setShowCsvImport(false)}
           onImport={(newTransactions) => {
             importTransactions(newTransactions);

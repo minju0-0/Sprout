@@ -9,11 +9,13 @@ import {
   toImportableTransactions,
   type CsvColumnMapping,
 } from "@/lib/csvImport";
+import { isDateInSeason } from "@/lib/seasonLogic";
 import { formatCurrency } from "@/lib/currency";
 type Step = "upload" | "map" | "preview";
 interface CsvImportModalProps {
   categories: BudgetCategory[];
   currencyCode: string | null;
+  activeSeason: string;
   onClose: () => void;
   onImport: (transactions: Omit<Transaction, "id">[]) => void;
 }
@@ -23,9 +25,15 @@ const FIELD_LABELS: { key: keyof CsvColumnMapping; label: string }[] = [
   { key: "amount", label: "Amount" },
   { key: "category", label: "Category" },
 ];
+const EXAMPLE_CSV = `Date,Description,Amount,Category
+2026-07-05,Coffee at Blue Bottle,4.50,Dining
+2026-07-06,Whole Foods groceries,62.18,Groceries
+2026-07-08,Electric bill,88.00,Utilities
+2026-07-10,Refund - returned shoes,(45.00),Shopping`;
 export function CsvImportModal({
   categories,
   currencyCode,
+  activeSeason,
   onClose,
   onImport,
 }: CsvImportModalProps) {
@@ -53,6 +61,9 @@ export function CsvImportModal({
   const errorCount = previewRows.filter((row) => row.error).length;
   const unmatchedCount = previewRows.filter(
     (row) => !row.error && row.categoryId === null,
+  ).length;
+  const outOfSeasonCount = previewRows.filter(
+    (row) => !row.error && row.date && !isDateInSeason(row.date, activeSeason),
   ).length;
   function parseText(text: string) {
     const parsed = parseCsvText(text);
@@ -82,6 +93,9 @@ export function CsvImportModal({
   function handleConfirmImport() {
     if (importable.length === 0) return;
     onImport(importable);
+  }
+  function handleUseExample() {
+    setPasteText(EXAMPLE_CSV);
   }
   return (
     <div
@@ -143,6 +157,56 @@ export function CsvImportModal({
                 placeholder={"Date,Description,Amount,Category\n2026-01-05,Coffee,4.50,Groceries"}
                 className="w-full rounded-lg border border-moss/20 bg-canvas px-3 py-2 font-data text-xs text-ink"
               />
+              {}
+              <div className="rounded-2xl border border-moss/15 bg-canvas p-4">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-ink">Expected format</p>
+                  <button
+                    type="button"
+                    onClick={handleUseExample}
+                    className="rounded-lg border border-moss/20 bg-card px-2.5 py-1 text-[11px] font-semibold text-moss transition-colors hover:bg-moss/10"
+                  >
+                    Try this example
+                  </button>
+                </div>
+                <pre className="overflow-x-auto rounded-lg bg-card px-3 py-2 font-data text-[11px] leading-relaxed text-ink-soft">
+{EXAMPLE_CSV}
+                </pre>
+                <ul className="mt-3 flex flex-col gap-1.5 text-[11px] text-ink-soft">
+                  <li>
+                    <strong className="text-ink">First row is the header</strong> — column names
+                    don&apos;t need to match exactly (we guess <em>Date</em>, <em>Description</em>,{" "}
+                    <em>Amount</em>, <em>Category</em> from common variants like &quot;Memo&quot;,
+                    &quot;Payee&quot;, or &quot;Debit&quot;), and you&apos;ll confirm or correct the
+                    guess on the next step regardless.
+                  </li>
+                  <li>
+                    <strong className="text-ink">Date</strong> — accepts{" "}
+                    <span className="font-data">YYYY-MM-DD</span> or{" "}
+                    <span className="font-data">M/D/YYYY</span>. Rows with an unrecognized date are
+                    skipped and listed as errors before anything imports.
+                  </li>
+                  <li>
+                    <strong className="text-ink">Amount</strong> — a plain positive number is
+                    treated as spending. A refund or credit can be written as{" "}
+                    <span className="font-data">-45.00</span> or{" "}
+                    <span className="font-data">(45.00)</span> and is imported as money added back
+                    to the category, same as an in-app &quot;refund/credit&quot; transaction.
+                    Currency symbols and commas (e.g. <span className="font-data">$1,234.56</span>
+                    ) are stripped automatically.
+                  </li>
+                  <li>
+                    <strong className="text-ink">Category</strong> — matched by name
+                    (case-insensitive) against your existing categories. Anything that
+                    doesn&apos;t match falls back to a category you pick on the review step, so no
+                    row is silently dropped for an unrecognized category name.
+                  </li>
+                  <li>
+                    <strong className="text-ink">Description </strong> (is optional) — a blank cell
+                    imports as &quot;Imported transaction&quot;.
+                  </li>
+                </ul>
+              </div>
               {fileError && (
                 <p className="flex items-center gap-1.5 text-xs text-rust">
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -206,7 +270,8 @@ export function CsvImportModal({
                 ))}
               </div>
               <p className="text-xs text-ink-soft">
-                {dataRows.length} row{dataRows.length === 1 ? "" : "s"} found.
+                {dataRows.length} row{dataRows.length === 1 ? "" : "s"} found. Date and Amount are
+                required — Description and Category are optional.
               </p>
               {fileError && (
                 <p className="flex items-center gap-1.5 text-xs text-rust">
@@ -264,34 +329,50 @@ export function CsvImportModal({
                     </tr>
                   </thead>
                   <tbody>
-                    {previewRows.map((row) => (
-                      <tr key={row.rowIndex} className="border-t border-moss/10">
-                        <td className="px-3 py-1.5 font-data text-ink-soft">
-                          {row.date ?? row.raw[mapping.date ?? -1] ?? "—"}
-                        </td>
-                        <td className="max-w-[160px] truncate px-3 py-1.5 text-ink-soft">
-                          {row.description}
-                        </td>
-                        <td className="px-3 py-1.5 text-right font-data text-ink">
-                          {row.amount !== null ? formatCurrency(row.amount, currencyCode) : "—"}
-                        </td>
-                        <td className="px-3 py-1.5">
-                          {row.error ? (
-                            <span className="inline-flex items-center gap-1 text-rust">
-                              <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
-                              {row.error}
+                    {previewRows.map((row) => {
+                      const outOfSeason =
+                        !row.error && row.date && !isDateInSeason(row.date, activeSeason);
+                      return (
+                        <tr key={row.rowIndex} className="border-t border-moss/10">
+                          <td className="px-3 py-1.5 font-data text-ink-soft">
+                            <span className="inline-flex items-center gap-1">
+                              {row.date ?? row.raw[mapping.date ?? -1] ?? "—"}
+                              {outOfSeason && (
+                                <span
+                                  title={`Outside ${activeSeason} — won't count toward this season's budget`}
+                                >
+                                  <AlertTriangle
+                                    className="h-3 w-3 shrink-0 text-marigold-700"
+                                    aria-hidden="true"
+                                  />
+                                </span>
+                              )}
                             </span>
-                          ) : row.categoryId ? (
-                            <span className="inline-flex items-center gap-1 text-moss">
-                              <Check className="h-3 w-3 shrink-0" aria-hidden="true" />
-                              {categories.find((c) => c.id === row.categoryId)?.name}
-                            </span>
-                          ) : (
-                            <span className="text-ink-soft">Uses fallback</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="max-w-[160px] truncate px-3 py-1.5 text-ink-soft">
+                            {row.description}
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-data text-ink">
+                            {row.amount !== null ? formatCurrency(row.amount, currencyCode) : "—"}
+                          </td>
+                          <td className="px-3 py-1.5">
+                            {row.error ? (
+                              <span className="inline-flex items-center gap-1 text-rust">
+                                <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                {row.error}
+                              </span>
+                            ) : row.categoryId ? (
+                              <span className="inline-flex items-center gap-1 text-moss">
+                                <Check className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                {categories.find((c) => c.id === row.categoryId)?.name}
+                              </span>
+                            ) : (
+                              <span className="text-ink-soft">Uses fallback</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -300,6 +381,8 @@ export function CsvImportModal({
                 {previewRows.length === 1 ? "" : "s"} ready to import
                 {errorCount > 0 &&
                   ` — ${errorCount} skipped due to unrecognized date or amount.`}
+                {outOfSeasonCount > 0 &&
+                  ` ${outOfSeasonCount} fall${outOfSeasonCount === 1 ? "s" : ""} outside ${activeSeason} and won't count toward this season's budget until harvested.`}
               </p>
               <div className="flex justify-end gap-2">
                 <button

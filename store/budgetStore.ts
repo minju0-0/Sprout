@@ -10,6 +10,7 @@ import type {
   Goal,
   HarvestRecord,
   MoneyPocket,
+  SeasonRolloverNotice,
   SyncStatus,
   Transaction,
 } from "@/types";
@@ -55,31 +56,37 @@ interface BudgetStore {
   hasSeenWalkthrough: boolean;
   syncStatus: SyncStatus;
   syncError: string | null;
+  // NEW: set whenever checkSeasonRollover() actually advances the season;
+  // null the rest of the time. Transient — never persisted, never sent to
+  // Supabase, same treatment as the other advisor/sync UI-only fields.
+  seasonRolloverNotice: SeasonRolloverNotice | null;
   addTransaction: (transaction: Omit<Transaction, "id">) => void;
   importTransactions: (transactions: Omit<Transaction, "id">[]) => void;
   updateTransaction: (id: string, updates: Omit<Transaction, "id">) => void;
   deleteTransaction: (id: string) => void;
-  addContribution: (goalId: string, amount: number) => void;
+  addContribution: (goalId: string, amount: number, fundFromUnallocated?: boolean) => void;
   addGoal: (goal: Omit<Goal, "id" | "currentAmount"> & { startingAmount?: number }) => void;
   updateGoal: (id: string, updates: Omit<Goal, "id" | "currentAmount">) => void;
   addDebt: (debt: Omit<Debt, "id" | "currentAmount">) => void;
   updateDebt: (id: string, updates: Omit<Debt, "id" | "currentAmount">) => void;
-  addDebtPayment: (debtId: string, amount: number) => void;
-  addCategory: (category: Omit<BudgetCategory, "id" | "spent" | "baseBudgetLimit">) => void;
+  addDebtPayment: (debtId: string, amount: number, fundFromUnallocated?: boolean) => void;
+  addCategory: (
+    category: Omit<BudgetCategory, "id" | "spent" | "baseBudgetLimit">,
+    fundFromUnallocated?: boolean,
+  ) => void;
   updateCategory: (
     id: string,
     updates: Omit<BudgetCategory, "id" | "spent" | "baseBudgetLimit">,
+    fundDelta?: boolean,
   ) => void;
-  // CHANGED: deleteCategory now takes an explicit refundToUnallocated flag
-  // instead of always sweeping the remaining budgetLimit - spent balance
-  // into unallocated. Defaults to true so every existing call site that
-  // doesn't pass it keeps today's behavior.
   deleteCategory: (id: string, refundToUnallocated?: boolean) => void;
   addIncome: (amount: number, note?: string) => void;
   moveMoney: (from: MoneyPocket, to: MoneyPocket, amount: number) => void;
   setCurrencyCode: (currencyCode: string) => void;
   startNewSeason: () => void;
   checkSeasonRollover: () => void;
+  // NEW: clears the notice once the user has acknowledged it.
+  dismissSeasonRolloverNotice: () => void;
   fetchAdvisorNotes: () => Promise<void>;
   askAdvisor: (question: string) => Promise<void>;
   setHasHydrated: (hasHydrated: boolean) => void;
@@ -113,6 +120,7 @@ export const useBudgetStore = create<BudgetStore>()(
       hasSeenWalkthrough: false,
       syncStatus: "idle",
       syncError: null,
+      seasonRolloverNotice: null,
       addTransaction: (transaction) =>
         set((state) => {
           const newTransaction: Transaction = {
@@ -201,9 +209,9 @@ export const useBudgetStore = create<BudgetStore>()(
         set((state) => ({ goals: state.goals.filter((goal) => goal.id !== id) })),
       deleteDebt: (id) =>
         set((state) => ({ debts: state.debts.filter((debt) => debt.id !== id) })),
-      addContribution: (goalId, amount) =>
-        set((state) => ({
-          goals: state.goals.map((goal) =>
+      addContribution: (goalId, amount, fundFromUnallocated = false) =>
+        set((state) => {
+          const goals = state.goals.map((goal) =>
             goal.id === goalId
               ? {
                   ...goal,
@@ -214,8 +222,11 @@ export const useBudgetStore = create<BudgetStore>()(
                   ],
                 }
               : goal,
-          ),
-        })),
+          );
+          const canFund = fundFromUnallocated && amount > 0 && amount <= state.unallocated;
+          if (!canFund) return { goals };
+          return { goals, unallocated: state.unallocated - amount };
+        }),
       addGoal: (goal) =>
         set((state) => ({
           goals: [
@@ -242,50 +253,97 @@ export const useBudgetStore = create<BudgetStore>()(
         set((state) => ({
           debts: state.debts.map((debt) => (debt.id === id ? { ...debt, ...updates } : debt)),
         })),
-      addDebtPayment: (debtId, amount) =>
-        set((state) => ({
-          debts: state.debts.map((debt) => {
-            if (debt.id !== debtId) return debt;
-            const applied = Math.min(amount, debt.currentAmount);
-            return {
-              ...debt,
-              currentAmount: Math.max(0, debt.currentAmount - amount),
-              history: [
-                ...(debt.history ?? []),
-                { id: crypto.randomUUID(), amount: applied, date: getLocalDateString() },
-              ],
-            };
-          }),
-        })),
-      addCategory: (category) =>
-        set((state) => ({
-          categories: [
-            ...state.categories,
-            {
-              ...category,
-              id: crypto.randomUUID(),
-              spent: 0,
-              baseBudgetLimit: category.budgetLimit,
-            },
-          ],
-        })),
-      updateCategory: (id, updates) =>
-        set((state) => ({
-          categories: state.categories.map((category) =>
-            category.id === id
+      addDebtPayment: (debtId, amount, fundFromUnallocated = false) =>
+        set((state) => {
+          const existingDebt = state.debts.find((debt) => debt.id === debtId);
+          if (!existingDebt) return state;
+          const applied = Math.min(amount, existingDebt.currentAmount);
+          const debts = state.debts.map((debt) =>
+            debt.id === debtId
               ? {
-                  ...category,
-                  ...updates,
-                  baseBudgetLimit: updates.budgetLimit,
+                  ...debt,
+                  currentAmount: Math.max(0, debt.currentAmount - amount),
+                  history: [
+                    ...(debt.history ?? []),
+                    { id: crypto.randomUUID(), amount: applied, date: getLocalDateString() },
+                  ],
                 }
+              : debt,
+          );
+          const canFund = fundFromUnallocated && applied > 0 && applied <= state.unallocated;
+          if (!canFund) return { debts };
+          return { debts, unallocated: state.unallocated - applied };
+        }),
+      addCategory: (category, fundFromUnallocated = false) =>
+        set((state) => {
+          const id = crypto.randomUUID();
+          const newCategory: BudgetCategory = {
+            ...category,
+            id,
+            spent: 0,
+            baseBudgetLimit: category.budgetLimit,
+          };
+          const amount = category.budgetLimit;
+          const canFund = fundFromUnallocated && amount > 0 && amount <= state.unallocated;
+          if (!canFund) {
+            return { categories: [...state.categories, newCategory] };
+          }
+          const event: AllocationEvent = {
+            id: crypto.randomUUID(),
+            type: "fill",
+            amount,
+            from: "unallocated",
+            to: id,
+            date: new Date().toISOString(),
+          };
+          return {
+            categories: [...state.categories, newCategory],
+            unallocated: state.unallocated - amount,
+            allocationHistory: [event, ...state.allocationHistory],
+          };
+        }),
+      updateCategory: (id, updates, fundDelta = false) =>
+        set((state) => {
+          const existing = state.categories.find((category) => category.id === id);
+          if (!existing) return state;
+          const categories = state.categories.map((category) =>
+            category.id === id
+              ? { ...category, ...updates, baseBudgetLimit: updates.budgetLimit }
               : category,
-          ),
-        })),
-      // CHANGED: refundToUnallocated defaults to true (old behavior).
-      // When false, the category's remaining budgetLimit - spent balance
-      // is simply discarded rather than credited back to unallocated —
-      // for the case where that money was never really "real" funded
-      // money to begin with.
+          );
+          const delta = updates.budgetLimit - existing.budgetLimit;
+          if (!fundDelta || delta === 0) return { categories };
+          if (delta > 0) {
+            if (delta > state.unallocated) return { categories };
+            const event: AllocationEvent = {
+              id: crypto.randomUUID(),
+              type: "fill",
+              amount: delta,
+              from: "unallocated",
+              to: id,
+              date: new Date().toISOString(),
+            };
+            return {
+              categories,
+              unallocated: state.unallocated - delta,
+              allocationHistory: [event, ...state.allocationHistory],
+            };
+          }
+          const refund = Math.abs(delta);
+          const event: AllocationEvent = {
+            id: crypto.randomUUID(),
+            type: "transfer",
+            amount: refund,
+            from: id,
+            to: "unallocated",
+            date: new Date().toISOString(),
+          };
+          return {
+            categories,
+            unallocated: state.unallocated + refund,
+            allocationHistory: [event, ...state.allocationHistory],
+          };
+        }),
       deleteCategory: (id, refundToUnallocated = true) =>
         set((state) => {
           const category = state.categories.find((c) => c.id === id);
@@ -345,6 +403,12 @@ export const useBudgetStore = create<BudgetStore>()(
             unallocated: state.unallocated + unallocatedRefund,
           };
         }),
+      // CHANGED: now also records which season(s) were just harvested and
+      // sets seasonRolloverNotice so the UI can tell the user this
+      // happened, instead of silently resetting the garden underneath
+      // them. newlyHarvestedSeasons is derived by diffing harvestHistory
+      // lengths before/after — catchUpSeason always *prepends* new
+      // records, so the newest N entries are exactly the ones just added.
       checkSeasonRollover: () => {
         const state = get();
         const result = catchUpSeason(
@@ -354,14 +418,26 @@ export const useBudgetStore = create<BudgetStore>()(
           state.transactions,
         );
         if (!result.rolledOver) return;
+        const newlyHarvestedCount = Math.max(
+          result.harvestHistory.length - state.harvestHistory.length,
+          0,
+        );
+        const newlyHarvestedSeasons = result.harvestHistory
+          .slice(0, newlyHarvestedCount)
+          .map((record) => record.season);
         set({
           activeSeason: result.activeSeason,
           categories: result.categories,
           harvestHistory: result.harvestHistory,
           transactions: result.transactions,
           unallocated: state.unallocated + result.unallocatedRefund,
+          seasonRolloverNotice:
+            newlyHarvestedSeasons.length > 0
+              ? { harvestedSeasons: newlyHarvestedSeasons, newSeason: result.activeSeason }
+              : null,
         });
       },
+      dismissSeasonRolloverNotice: () => set({ seasonRolloverNotice: null }),
       fetchAdvisorNotes: async () => {
         set({ isAdvisorLoading: true, advisorError: null });
         try {

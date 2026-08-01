@@ -28,9 +28,6 @@ export default function BudgetPage() {
   const moveMoney = useBudgetStore((state) => state.moveMoney);
   const [categoryModal, setCategoryModal] = useState<CategoryModalState | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  // NEW: whether the leftover budget on the category being deleted should
-  // be credited back to Unallocated. Defaults to true (today's behavior),
-  // reset to true every time a new delete confirmation is opened.
   const [refundOnDelete, setRefundOnDelete] = useState(true);
   const [envelopeModal, setEnvelopeModal] = useState<EnvelopeModalState | null>(null);
   function transactionCountFor(categoryId: string) {
@@ -213,12 +210,14 @@ export default function BudgetPage() {
       {categoryModal && (
         <CategoryModal
           state={categoryModal}
+          unallocated={unallocated}
+          currencyCode={currencyCode}
           onClose={() => setCategoryModal(null)}
-          onSubmit={(values) => {
+          onSubmit={(values, fundFromUnallocated) => {
             if (categoryModal.mode === "edit") {
-              updateCategory(categoryModal.category.id, values);
+              updateCategory(categoryModal.category.id, values, fundFromUnallocated);
             } else {
-              addCategory(values);
+              addCategory(values, fundFromUnallocated);
             }
             setCategoryModal(null);
           }}
