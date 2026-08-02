@@ -17,19 +17,27 @@ interface SC {
   sp: boolean;
   wd: boolean;
 }
-// Stage differentiation is deliberately posture-based, not just color-based:
-// thriving stands upright and full-size; steady leans a hair and mutes
-// slightly; wilting visibly droops and tilts with washed-out, yellowing
-// color; overgrown widens/sprawls with weeds creeping in and a darker,
-// tangled palette. `tilt` rotates the whole plant group around its base,
-// `droop` feeds leaf/frond sag — so a glance at silhouette alone should
-// tell the stages apart, not just a close look at hue.
 const STAGE: Record<Stage, SC> = {
   Thriving: { lf: "#4f8a44", ld: "#356b2c", ll: "#8bcf78", ls: "#264a1c", st: "#3a6a30", fo: 1.0, scale: 1.0, droop: 0.0, tilt: 0, sp: true, wd: false },
   Steady: { lf: "#5c8b4e", ld: "#43663a", ll: "#7aab68", ls: "#33502a", st: "#4a6a3c", fo: 0.76, scale: 0.93, droop: 0.14, tilt: 2.5, sp: false, wd: false },
   Wilting: { lf: "#a09a52", ld: "#7d7638", ll: "#bcb56a", ls: "#5e5824", st: "#8a7c42", fo: 0.4, scale: 0.78, droop: 0.68, tilt: 9, sp: false, wd: false },
   Overgrown: { lf: "#2a5e26", ld: "#173c16", ll: "#3d7a30", ls: "#122e12", st: "#20401e", fo: 0.22, scale: 1.06, droop: 0.3, tilt: -6, sp: false, wd: true },
 };
+/**
+ * Rounds a computed SVG coordinate to 3 decimal places.
+ *
+ * Several plant illustrations position elements using Math.cos/Math.sin/
+ * Math.atan2. The ECMAScript spec doesn't require these to be bit-identical
+ * across engines, so the exact same expression can legitimately return a
+ * value like 12.606079867221862 when this component renders on the server
+ * (Node) and 12.606079867221863 when React hydrates it in the browser — a
+ * one-ulp difference with zero visual effect, but enough for React's
+ * hydration check to flag the tree as mismatched. Rounding collapses both
+ * values to 12.606, so the server and client markup always match exactly.
+ */
+function rc(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
 function Soil() {
   return (
     <>
@@ -316,8 +324,8 @@ function SunflowerPlant({ stage, uid }: { stage: Stage; uid: string }) {
             {Array.from({ length: pc }, (_, i) => {
               const ang = ((i * 360) / pc) * (Math.PI / 180);
               const pr = hr + 13;
-              const px = hx + Math.cos(ang) * pr;
-              const py = hy + Math.sin(ang) * pr;
+              const px = rc(hx + Math.cos(ang) * pr);
+              const py = rc(hy + Math.sin(ang) * pr);
               return (
                 <ellipse
                   key={i}
@@ -338,7 +346,16 @@ function SunflowerPlant({ stage, uid }: { stage: Stage; uid: string }) {
               const fib = i * 137.508 * (Math.PI / 180);
               const sr = Math.sqrt(i) * 3.0;
               if (sr > hr * 0.87) return null;
-              return <circle key={i} cx={hx + Math.cos(fib) * sr} cy={hy + Math.sin(fib) * sr} r="1.3" fill="#6a3c1a" opacity="0.85" />;
+              return (
+                <circle
+                  key={i}
+                  cx={rc(hx + Math.cos(fib) * sr)}
+                  cy={rc(hy + Math.sin(fib) * sr)}
+                  r="1.3"
+                  fill="#6a3c1a"
+                  opacity="0.85"
+                />
+              );
             })}
           </>
         )}
@@ -347,8 +364,8 @@ function SunflowerPlant({ stage, uid }: { stage: Stage; uid: string }) {
             {Array.from({ length: 12 }, (_, i) => {
               const ang = i * 30 * (Math.PI / 180);
               const pr = 28;
-              const px = 58 + Math.cos(ang) * pr;
-              const py = 26 + Math.sin(ang) * pr;
+              const px = rc(58 + Math.cos(ang) * pr);
+              const py = rc(26 + Math.sin(ang) * pr);
               return (
                 <ellipse
                   key={i}
@@ -513,8 +530,6 @@ function FernPlant({ stage }: { stage: Stage }) {
   }) {
     const pinnaeCount = stage === "Wilting" ? 6 : stage === "Overgrown" ? 11 : 9;
     const dir = flip ? -1 : 1;
-    // Wilting fronds sag toward the ground rather than reaching up —
-    // pull the control/end points down proportionally to droop.
     const sag = sc.droop * 22;
     const cy1d = cy1 + sag * 0.5;
     const eyd = ey + sag;
@@ -548,6 +563,7 @@ function FernPlant({ stage }: { stage: Stage }) {
           const flipPinna = i % 2 === 1;
           const px2 = px + nx * pLen * (flipPinna ? -1 : 1) * 0.5;
           const py2 = py + ny * pLen * (flipPinna ? -1 : 1) * 0.5;
+          const pinnaAngle = rc((Math.atan2(ny, nx) * 180) / Math.PI + (flipPinna ? -30 : -150));
           return (
             <ellipse
               key={i}
@@ -558,7 +574,7 @@ function FernPlant({ stage }: { stage: Stage }) {
               fill={i % 2 === 0 ? sc.lf : sc.ld}
               stroke={sc.ls}
               strokeWidth="0.7"
-              transform={`rotate(${(Math.atan2(ny, nx) * 180) / Math.PI + (flipPinna ? -30 : -150)} ${px2} ${py2})`}
+              transform={`rotate(${pinnaAngle} ${px2} ${py2})`}
               opacity={stage === "Wilting" ? 0.72 : 1}
             />
           );
