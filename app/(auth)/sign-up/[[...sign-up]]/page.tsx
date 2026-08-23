@@ -9,14 +9,8 @@ import { OAuthButtons } from "@/components/OAuthButtons";
 import { AuthDivider } from "@/components/AuthDivider";
 import { authButtonClass, authGhostLinkClass } from "@/lib/authStyles";
 
-// Same easing curve used by the layout's card transition, so the inner
-// view swap (form → verify → done) feels like one continuous motion
-// system rather than two different animations layered on top of each
-// other.
 const EASE_OUT: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
-// Only opacity + a small y shift here — no scale — so this never
-// compounds with the layout's own card/panel transitions.
 const viewTransition = {
   initial: { opacity: 0, y: 8 },
   animate: { opacity: 1, y: 0 },
@@ -116,19 +110,25 @@ export default function SignUpPage() {
       )}
 
       {view === "form" && (
-        <motion.div key="form" {...viewTransition} className="flex flex-col gap-5">
+        <motion.div key="form" {...viewTransition} className="flex flex-col gap-4">
           <div>
-            <h1 className="font-display text-2xl text-ink">Plant your garden</h1>
-            <p className="mt-1 text-sm text-ink-soft">
+            <h1 className="font-display text-xl text-ink">Plant your garden</h1>
+            <p className="mt-0.5 text-sm text-ink-soft">
               Create an account to start tracking your first season.
             </p>
           </div>
 
+          {/* OAuthButtons renders its own #clerk-captcha mount point now —
+              don't add a second one in this form, Smart CAPTCHA needs a
+              single, unique id per page. When Turnstile decides to render
+              the interactive checkbox (uncommon, mostly on unfamiliar
+              origins like localhost) it adds real height here — that's
+              expected, not a layout bug. */}
           <OAuthButtons mode="sign-up" />
           <AuthDivider label="or sign up with email" />
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
-            <div className="grid grid-cols-2 gap-3">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-2.5">
               <AuthField
                 id="firstName"
                 label="First name"
@@ -164,8 +164,6 @@ export default function SignUpPage() {
               error={errors.fields.password?.message}
               autoComplete="new-password"
             />
-            {/* required to catch captcha renders if enabled */}
-            <div id="clerk-captcha" />
 
             <button
               type="submit"

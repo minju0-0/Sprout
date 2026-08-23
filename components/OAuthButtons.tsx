@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSignIn, useSignUp } from "@clerk/nextjs";
 import { motion, type Variants } from "framer-motion";
 
@@ -59,62 +59,84 @@ const item: Variants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.25, ease: [0.22, 1, 0.36, 1] } },
 };
 
+// If the browser hasn't actually navigated away within this window, the
+// flow has stalled server-side (misconfigured OAuth redirect URI, an
+// un-allow-listed redirect URL in the Clerk dashboard, a provider app stuck
+// in dev mode, etc). Surface it instead of spinning forever.
+const STALL_TIMEOUT_MS = 12000;
+
 export function OAuthButtons({ mode }: OAuthButtonsProps) {
+  // Core 3 Future API: useSignIn()/useSignUp() always return a resource —
+  // there's no `isLoaded` guard anymore, loading is tracked per-call instead.
   const { signIn } = useSignIn();
   const { signUp } = useSignUp();
   const [pending, setPending] = useState<OAuthStrategy | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Both hook objects return an authenticateWithRedirect shape, so we can cast loosely here
-  const client: any = mode === "sign-in" ? signIn : signUp;
-  const isLoaded = Boolean(client);
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  function providerLabel(strategy: OAuthStrategy) {
+    return strategy === "oauth_google" ? "Google" : "Facebook";
+  }
 
   async function handleClick(strategy: OAuthStrategy) {
-    if (!client) {
-      setError("Auth isn't ready yet — wait a moment and try again.");
-      return;
-    }
     if (pending) return;
 
     setPending(strategy);
     setError(null);
 
-    try {
-      const redirectUrl = `/${mode}/sso-callback`;
-      const redirectUrlComplete = "/garden";
+    const origin = window.location.origin;
+    // NOTE: these param names are the OPPOSITE of the old
+    // authenticateWithRedirect({ redirectUrl, redirectUrlComplete }) shape —
+    // easy to mix up when migrating.
+    // redirectCallbackUrl = the /sso-callback route that mounts the manual
+    //   Core 3 callback and finishes the handshake.
+    // redirectUrl = where to land once a session actually exists.
+    const redirectCallbackUrl = `${origin}/${mode}/sso-callback`;
+    const redirectUrl = `${origin}/garden`;
 
-      if (typeof client.authenticateWithRedirect === "function") {
-        await client.authenticateWithRedirect({
-          strategy,
-          redirectUrl,
-          redirectUrlComplete,
-        });
-      } else if (client.value && typeof client.value.authenticateWithRedirect === "function") {
-        await client.value.authenticateWithRedirect({
-          strategy,
-          redirectUrl,
-          redirectUrlComplete,
-        });
-      } else if (client.sso && typeof client.sso.authenticateWithRedirect === "function") {
-        await client.sso.authenticateWithRedirect({
-          strategy,
-          redirectUrl,
-          redirectUrlComplete,
-        });
-      }
-    } catch (err) {
-      console.error(`[OAuthButtons] ${strategy} failed:`, err);
-      const message =
-        err && typeof err === "object" && "errors" in err
-          ? (err as { errors?: { message?: string }[] }).errors?.[0]?.message
-          : undefined;
-
+    // Safety net: if nothing has navigated the browser away by this point,
+    // stop showing an infinite spinner and tell the user something's wrong.
+    timeoutRef.current = setTimeout(() => {
+      setPending(null);
       setError(
-        message ??
-          `Couldn't start ${
-            strategy === "oauth_google" ? "Google" : "Facebook"
-          } sign-in.`
+        `${providerLabel(strategy)} sign-in is taking too long — check that ` +
+          `it's configured correctly and try again.`
       );
+    }, STALL_TIMEOUT_MS);
+
+    try {
+      const resource = mode === "sign-in" ? signIn : signUp;
+      if (!resource || typeof resource.sso !== "function") {
+        throw new Error("resource.sso is not available on this Clerk resource.");
+      }
+
+      // .sso() performs the browser redirect itself as a side effect when
+      // successful — this only resolves back into our code if that did NOT
+      // happen (an error, or a status Clerk needs us to handle).
+      const { error: ssoError } = await resource.sso({
+        strategy,
+        redirectCallbackUrl,
+        redirectUrl,
+      });
+
+      if (ssoError) {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        console.error(`[OAuthButtons] ${strategy} failed:`, ssoError);
+        setError(ssoError.message ?? `Couldn't start ${providerLabel(strategy)} sign-in.`);
+        setPending(null);
+      }
+      // No error: the browser is being redirected to the provider now.
+      // Leave `pending` as-is — this component is about to unmount.
+    } catch (err) {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      console.error(`[OAuthButtons] ${strategy} failed:`, err);
+      setError(`Couldn't start ${providerLabel(strategy)} sign-in.`);
       setPending(null);
     }
   }
@@ -135,7 +157,7 @@ export function OAuthButtons({ mode }: OAuthButtonsProps) {
             whileTap={{ scale: 0.97 }}
             type="button"
             onClick={() => handleClick(provider.strategy)}
-            disabled={!isLoaded || pending !== null}
+            disabled={pending !== null}
             className="pointer-events-auto relative z-10 flex cursor-pointer items-center gap-2 rounded-full border border-white/50 bg-white/30 px-4 py-1.5 text-xs font-semibold text-ink shadow-sm backdrop-blur-md transition-colors hover:border-moss/30 hover:bg-white/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-moss disabled:cursor-not-allowed disabled:opacity-60"
           >
             {pending === provider.strategy ? (
@@ -148,6 +170,11 @@ export function OAuthButtons({ mode }: OAuthButtonsProps) {
         ))}
       </motion.div>
       {error && <p className="text-xs font-medium text-rust">{error}</p>}
+      {/* Smart CAPTCHA (if enabled on the instance) attaches to any client
+          call, including .sso() — not just password sign-up. This needs to
+          live wherever OAuthButtons is rendered, so it's here instead of on
+          individual pages. Only one of these should exist per page. */}
+      <div id="clerk-captcha" />
     </div>
   );
 }
