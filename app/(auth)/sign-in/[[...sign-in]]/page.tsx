@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth, useSignIn } from "@clerk/nextjs";
 import { AuthField } from "@/components/AuthField";
+import { OAuthButtons } from "@/components/OAuthButtons";
+import { AuthDivider } from "@/components/AuthDivider";
 import { authButtonClass, authGhostLinkClass } from "@/lib/authStyles";
 type ForgotStep = "request" | "verify" | "reset";
 export default function SignInPage() {
@@ -197,12 +199,14 @@ export default function SignInPage() {
     );
   }
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <div>
-        <h1 className="font-display text-2xl text-ink">Welcome back</h1>
-        <p className="mt-1 text-sm text-ink-soft">Sign in to check on your garden.</p>
+        <h1 className="font-display text-xl text-ink">Welcome back</h1>
+        <p className="mt-0.5 text-sm text-ink-soft">Sign in to check on your garden.</p>
       </div>
-      <form onSubmit={handlePasswordSubmit} className="flex flex-col gap-4">
+      <OAuthButtons mode="sign-in" />
+      <AuthDivider label="or sign in with email" />
+      <form onSubmit={handlePasswordSubmit} className="flex flex-col gap-3">
         <AuthField
           id="email"
           label="Email address"

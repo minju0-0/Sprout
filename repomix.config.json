@@ -1,28 +1,55 @@
 {
-  "ignore": {
-    "customPatterns": [
-      "node_modules",
-      ".next",
-      ".env.local",
-      "public",
-      "repomix-output.*",
-      "package-lock.json",
-      "MDFILES",
-      "**/tsconfig.tsbuildinfo",
-      "**/public/**",
-      "**/*.png",
-      "**/*.jpg",
-      "**/*.jpeg",
-      "**/*.svg",
-      "**/*.ico"
-
-    ]
-  },
-
   "output": {
+    "filePath": "repomix-output.xml",
+    "style": "xml",
+    "parsableStyle": true,
     "removeComments": true,
     "removeEmptyLines": true,
     "directoryStructure": false,
     "fileSummary": false
+  },
+  "ignore": {
+    "useGitignore": true,
+    "useDefaultPatterns": true,
+    "customPatterns": [
+      "**/repomix-output.*",
+      "**/repomix.config.json",
+      "**/node_modules/**",
+      "**/.next/**",
+      "**/.git/**",
+      "**/.idea/**",
+      "**/.vscode/**",
+      "**/dist/**",
+      "**/build/**",
+
+      "**/public/**",
+      "**/MDFILES/**",
+      "**/README.md",
+
+      "**/package-lock.json",
+      "**/yarn.lock",
+      "**/pnpm-lock.yaml",
+      "**/tsconfig.tsbuildinfo",
+      "**/next-env.d.ts",
+
+      "**/instrumentation*.ts",
+      "**/sentry.*.config.ts",
+      "**/vitest.config.ts",
+      "**/eslint.config.mjs",
+      "**/postcss.config.mjs",
+      "**/.env*",
+
+      "**/*.test.*",
+      "**/*.spec.*",
+      "**/*.min.*",
+      "**/*.map",
+      "**/*.png",
+      "**/*.jpg",
+      "**/*.jpeg",
+      "**/*.gif",
+      "**/*.svg",
+      "**/*.ico",
+      "**/*.pdf"
+    ]
   }
 }
